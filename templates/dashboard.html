@@ -1,0 +1,265 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dementia Memory - Caregiver Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f0f0f0;
+            padding: 20px;
+        }
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header h1 { font-size: 28px; margin-bottom: 5px; }
+        .nav {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .nav a {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+        .nav a:hover { background: rgba(255,255,255,0.3); }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .card h3 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+            font-size: 16px;
+        }
+        .stat-number {
+            font-size: 36px;
+            font-weight: bold;
+            color: #3498db;
+        }
+        .objects-list, .reminders-list, .family-list {
+            grid-column: 1 / -1;
+        }
+        .item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            background: white;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .item-name {
+            font-weight: bold;
+            color: #2c3e50;
+            flex: 1;
+        }
+        .item-detail {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        .importance-badge {
+            background: #e74c3c;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-overdue {
+            background: #e74c3c;
+            color: white;
+        }
+        .status-normal {
+            background: #27ae60;
+            color: white;
+        }
+        .status-soon {
+            background: #f39c12;
+            color: white;
+        }
+        .action-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .action-btn:hover { background: #2980b9; }
+        .footer {
+            text-align: center;
+            color: #7f8c8d;
+            margin-top: 30px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📚 Dementia Memory Support Dashboard</h1>
+        <p>Caregiver Interface - Monitor & Manage All Information</p>
+        <div class="nav">
+            <a href="/">Dashboard</a>
+            <a href="/reminders">Reminders</a>
+            <a href="/family">Family</a>
+            <a href="/activity">Activity Log</a>
+        </div>
+    </div>
+    
+    <div class="grid">
+        <div class="card">
+            <h3>📦 Total Objects</h3>
+            <div class="stat-number" id="stat-total">0</div>
+        </div>
+        <div class="card">
+            <h3>💊 High Priority (Meds)</h3>
+            <div class="stat-number" id="stat-meds">0</div>
+        </div>
+        <div class="card">
+            <h3>👥 Family Members</h3>
+            <div class="stat-number" id="stat-family">0</div>
+        </div>
+        <div class="card">
+            <h3>⚠️ Overdue Visits</h3>
+            <div class="stat-number" id="stat-overdue">0</div>
+        </div>
+    </div>
+    
+    <div class="card objects-list">
+        <h3>📍 Recent Detections</h3>
+        <div id="objects-container">Loading...</div>
+    </div>
+    
+    <div class="card reminders-list">
+        <h3>⏰ Today's Reminders</h3>
+        <div id="reminders-container">Loading...</div>
+    </div>
+    
+    <div class="card family-list">
+        <h3>👨‍👩‍👧‍👦 Family Status</h3>
+        <div id="family-container">Loading...</div>
+    </div>
+    
+    <div class="footer">
+        <p>Last updated: <span id="last-update">now</span></p>
+        <p>🔒 This dashboard is password protected. Keep it secure.</p>
+    </div>
+    
+    <script>
+        async function loadData() {
+            // Load stats
+            const statsResp = await fetch('/api/stats');
+            const stats = await statsResp.json();
+            document.getElementById('stat-total').textContent = stats.total_objects;
+            document.getElementById('stat-meds').textContent = 
+                stats.by_importance['level_5'] || 0;
+            
+            // Load family stats
+            const familyResp = await fetch('/api/family');
+            const familyData = await familyResp.json();
+            document.getElementById('stat-family').textContent = familyData.members.length;
+            
+            const overdue = familyData.members.filter(m => m.overdue).length;
+            document.getElementById('stat-overdue').textContent = overdue;
+            
+            // Load recent objects
+            const objResp = await fetch('/api/objects');
+            const data = await objResp.json();
+            
+            const container = document.getElementById('objects-container');
+            container.innerHTML = '';
+            
+            data.objects.slice(0, 5).forEach(obj => {
+                const div = document.createElement('div');
+                div.className = 'item';
+                div.innerHTML = `
+                    <div style="flex: 1;">
+                        <div class="item-name">${obj.name}</div>
+                        <div class="item-detail">📍 ${obj.location || 'Unknown'}</div>
+                        <div class="item-detail">${obj.description}</div>
+                    </div>
+                    <div class="importance-badge">Priority: ${obj.importance}/5</div>
+                `;
+                container.appendChild(div);
+            });
+            
+            // Load reminders
+            const remResp = await fetch('/api/reminders');
+            const remData = await remResp.json();
+            const remContainer = document.getElementById('reminders-container');
+            remContainer.innerHTML = '';
+            
+            remData.reminders.forEach(rem => {
+                const div = document.createElement('div');
+                div.className = 'item';
+                const status = rem.enabled ? 'status-normal' : 'status-overdue';
+                div.innerHTML = `
+                    <div style="flex: 1;">
+                        <div class="item-name">${rem.type.toUpperCase()} - ${rem.time}</div>
+                        <div class="item-detail">${rem.prompts[0]}</div>
+                    </div>
+                    <span class="status-badge ${status}">${rem.enabled ? 'ACTIVE' : 'DISABLED'}</span>
+                `;
+                remContainer.appendChild(div);
+            });
+            
+            // Load family
+            const famContainer = document.getElementById('family-container');
+            famContainer.innerHTML = '';
+            
+            familyData.members.slice(0, 5).forEach(mem => {
+                const div = document.createElement('div');
+                div.className = 'item';
+                const status = mem.overdue ? 'status-overdue' : (mem.last_visit ? 'status-normal' : 'status-soon');
+                div.innerHTML = `
+                    <div style="flex: 1;">
+                        <div class="item-name">${mem.name}</div>
+                        <div class="item-detail">${mem.relation} • ${mem.visits_count} visits</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="status-badge ${status}">${mem.overdue ? 'OVERDUE' : 'CURRENT'}</span>
+                        <button class="action-btn" onclick="recordVisit('${mem.id}')">Visit</button>
+                    </div>
+                `;
+                famContainer.appendChild(div);
+            });
+            
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+        }
+        
+        function recordVisit(memberId) {
+            fetch(`/api/family/${memberId}/visit`, {method: 'POST'})
+                .then(() => loadData());
+        }
+        
+        loadData();
+        setInterval(loadData, 10000);  // Refresh every 10 seconds
+    </script>
+</body>
+</html>

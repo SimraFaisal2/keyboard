@@ -1,0 +1,67 @@
+{
+  "routines": [
+    {
+      "id": "morning",
+      "name": "Morning Routine",
+      "enabled": true,
+      "steps": [
+        {
+          "id": "glasses",
+          "title": "Put on glasses",
+          "time_window": "08:00-09:30",
+          "expected_objects": [
+            "reading_glasses"
+          ],
+          "prompt": "Let's find your glasses. They are usually in their safe place.",
+          "follow_up_prompt": "Can you show the glasses to the camera?",
+          "confirmation_type": "user",
+          "priority": 4,
+          "caregiver_alert_after_minutes": 0,
+          "completed_at": null,
+          "skipped_at": null
+        },
+        {
+          "id": "water",
+          "title": "Drink water",
+          "time_window": "08:00-10:00",
+          "expected_objects": [
+            "water_glass"
+          ],
+          "prompt": "A drink of water can help start the morning.",
+          "follow_up_prompt": "",
+          "confirmation_type": "user",
+          "priority": 3,
+          "caregiver_alert_after_minutes": 0,
+          "completed_at": null,
+          "skipped_at": null
+        }
+      ],
+      "created_at": "2026-06-28T23:32:36.575679",
+      "updated_at": "2026-06-28T23:32:36.575679"
+    },
+    {
+      "id": "medication",
+      "name": "Medication Support",
+      "enabled": true,
+      "steps": [
+        {
+          "id": "pill_bottle",
+          "title": "Find pill bottle",
+          "time_window": "12:00-13:00",
+          "expected_objects": [
+            "pill_bottle"
+          ],
+          "prompt": "It's time to check your medication. Let's find the pill bottle.",
+          "follow_up_prompt": "Please wait for a caregiver if you are unsure.",
+          "confirmation_type": "user",
+          "priority": 5,
+          "caregiver_alert_after_minutes": 15,
+          "completed_at": null,
+          "skipped_at": null
+        }
+      ],
+      "created_at": "2026-06-28T23:32:36.575679",
+      "updated_at": "2026-06-28T23:32:36.575679"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "members": [
+    {
+      "id": "daughter_sarah",
+      "name": "Sarah",
+      "relation": "daughter",
+      "phone": "555-0001",
+      "email": "sarah@email.com",
+      "photo_path": null,
+      "voice_greeting_path": null,
+      "bio": "Lives nearby, visits weekly",
+      "visit_frequency": "weekly",
+      "last_visit": "2026-06-29T00:30:53.389198",
+      "visits": [
+        "2026-06-28T15:50:24.524035",
+        "2026-06-28T23:32:36.486290",
+        "2026-06-29T00:00:54.666405",
+        "2026-06-29T00:01:18.902471",
+        "2026-06-29T00:04:10.168751",
+        "2026-06-29T00:18:29.009446",
+        "2026-06-29T00:29:28.948342",
+        "2026-06-29T00:30:53.389198"
+      ],
+      "created_at": "2026-06-28T15:50:24.513819"
+    },
+    {
+      "id": "grandson_john",
+      "name": "John",
+      "relation": "grandson",
+      "phone": "555-0002",
+      "email": "john@email.com",
+      "photo_path": null,
+      "voice_greeting_path": null,
+      "bio": "Visits on weekends",
+      "visit_frequency": "bi-weekly",
+      "last_visit": "2026-06-29T00:30:55.242428",
+      "visits": [
+        "2026-06-29T00:30:55.242428"
+      ],
+      "created_at": "2026-06-28T15:50:24.513819"
+    },
+    {
+      "id": "caregiver_maria",
+      "name": "Maria",
+      "relation": "caregiver",
+      "phone": "555-0003",
+      "email": "maria@email.com",
+      "photo_path": null,
+      "voice_greeting_path": null,
+      "bio": "Full-time caregiver",
+      "visit_frequency": "daily",
+      "last_visit": "2026-06-29T00:30:57.975754",
+      "visits": [
+        "2026-06-29T00:30:57.975754"
+      ],
+      "created_at": "2026-06-28T15:50:24.513819"
+    }
+  ],
+  "relationships": {
+    "daughter_sarah": [],
+    "grandson_john": [],
+    "caregiver_maria": []
+  },
+  "saved_at": "2026-06-29T00:30:57.975754"
+}

@@ -1,0 +1,27 @@
+from swarm import app
+
+if __name__ == "__main__":
+    # Intentionally messy code with a vulnerability (eval) and potential bugs
+    broken_code = """
+def calculate_area(radius):
+    if radius < 0:
+        return "Invalid"
+    return eval(f"3.14 * {radius} * {radius}")
+"""
+
+    initial_state = {
+        "source_code": broken_code,
+        "test_code": "",
+        "security_report": "",
+        "sandbox_output": "",
+        "iterations": 0,
+        "status": "started"
+    }
+
+    print("🚀 Triggering the Autonomous DevOps Swarm (Powered by Google Gemini)...")
+    final_output = app.invoke(initial_state)
+    
+    print("\n================ WORKFLOW COMPLETE ================")
+    print(f"Final Status: {final_output['status']}")
+    print(f"Total Iterations: {final_output['iterations']}")
+    print(f"Sandbox Logs:\n{final_output['sandbox_output']}")

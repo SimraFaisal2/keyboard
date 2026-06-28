@@ -1,0 +1,16 @@
+{
+  "Sarah": {
+    "name": "Sarah",
+    "relation": "daughter",
+    "photo_path": null,
+    "voice_path": "memory/family_voices/sarah.wav",
+    "added_at": "2026-06-29T00:29:28.933342"
+  },
+  "John": {
+    "name": "John",
+    "relation": "grandson",
+    "photo_path": null,
+    "voice_path": "memory/family_voices/john.wav",
+    "added_at": "2026-06-29T00:29:28.934342"
+  }
+}

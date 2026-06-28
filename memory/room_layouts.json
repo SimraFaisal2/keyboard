@@ -1,0 +1,49 @@
+{
+  "bedroom": {
+    "name": "bedroom",
+    "description": "Main sleeping area",
+    "object_zones": {
+      "wedding_ring": {
+        "coords": [
+          100,
+          50,
+          150,
+          100
+        ],
+        "updated_at": "2026-06-29T00:29:28.944342"
+      },
+      "reading_glasses": {
+        "coords": [
+          200,
+          80,
+          250,
+          130
+        ],
+        "updated_at": "2026-06-29T00:29:28.945342"
+      }
+    },
+    "created_at": "2026-06-29T00:29:28.941342"
+  },
+  "living room": {
+    "name": "living room",
+    "description": "Main gathering area",
+    "object_zones": {
+      "house_keys": {
+        "coords": [
+          50,
+          100,
+          100,
+          150
+        ],
+        "updated_at": "2026-06-29T00:29:28.945342"
+      }
+    },
+    "created_at": "2026-06-29T00:29:28.942342"
+  },
+  "kitchen": {
+    "name": "kitchen",
+    "description": "Cooking area",
+    "object_zones": {},
+    "created_at": "2026-06-29T00:29:28.943342"
+  }
+}

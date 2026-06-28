@@ -1,0 +1,101 @@
+{
+  "tasks": [
+    {
+      "id": "take_medication",
+      "title": "Take Medication",
+      "prompt": "Let's take this one step at a time.",
+      "priority": 5,
+      "steps": [
+        {
+          "id": "find_pills",
+          "instruction": "Find your pill bottle.",
+          "expected_objects": [
+            "pill_bottle"
+          ],
+          "confirmation_type": "user",
+          "completed_at": null,
+          "completion_source": null,
+          "notes": ""
+        },
+        {
+          "id": "find_water",
+          "instruction": "Find a glass of water.",
+          "expected_objects": [
+            "water_glass"
+          ],
+          "confirmation_type": "user",
+          "completed_at": null,
+          "completion_source": null,
+          "notes": ""
+        },
+        {
+          "id": "sit_down",
+          "instruction": "Sit down somewhere comfortable.",
+          "expected_objects": [],
+          "confirmation_type": "user",
+          "completed_at": null,
+          "completion_source": null,
+          "notes": ""
+        },
+        {
+          "id": "confirm_taken",
+          "instruction": "When you are ready, mark this step done.",
+          "expected_objects": [],
+          "confirmation_type": "user_or_caregiver",
+          "completed_at": null,
+          "completion_source": null,
+          "notes": ""
+        }
+      ],
+      "active": false,
+      "started_at": null,
+      "completed_at": null,
+      "current_step_index": 0,
+      "created_at": "2026-06-28T23:32:36.582198"
+    },
+    {
+      "id": "prepare_bed",
+      "title": "Prepare For Bed",
+      "prompt": "Let's get ready for a calm night.",
+      "priority": 3,
+      "steps": [
+        {
+          "id": "charge_phone",
+          "instruction": "Put your phone on the charger.",
+          "expected_objects": [
+            "phone_charger"
+          ],
+          "confirmation_type": "user",
+          "completed_at": null,
+          "completion_source": null,
+          "notes": ""
+        },
+        {
+          "id": "find_slippers",
+          "instruction": "Place your slippers near the bed.",
+          "expected_objects": [
+            "bedroom_slippers"
+          ],
+          "confirmation_type": "user",
+          "completed_at": null,
+          "completion_source": null,
+          "notes": ""
+        },
+        {
+          "id": "lights",
+          "instruction": "Turn down bright lights.",
+          "expected_objects": [],
+          "confirmation_type": "user",
+          "completed_at": null,
+          "completion_source": null,
+          "notes": ""
+        }
+      ],
+      "active": false,
+      "started_at": null,
+      "completed_at": null,
+      "current_step_index": 0,
+      "created_at": "2026-06-28T23:32:36.582198"
+    }
+  ]
+}

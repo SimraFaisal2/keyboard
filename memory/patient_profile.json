@@ -1,0 +1,26 @@
+{
+  "preferred_name": "friend",
+  "primary_language": "en",
+  "calm_voice_rate": 100,
+  "caregiver_name": "",
+  "caregiver_phone": "",
+  "emergency_contact": "",
+  "high_risk_times": [
+    {
+      "start": "17:00",
+      "end": "21:00"
+    }
+  ],
+  "exit_risk_enabled": true,
+  "comfort_preferences": [
+    "family photos",
+    "calm voice",
+    "familiar music"
+  ],
+  "known_triggers": [],
+  "safe_places": [
+    "living room",
+    "kitchen"
+  ],
+  "updated_at": "2026-06-28T23:32:36.590198"
+}
