@@ -1,5 +1,7 @@
 # MemoryMate (MEMO) — Assistive Communication & Memory System
 
+<img src="photo.png" alt="Simra Faisal" width="140" align="right"/>
+
 An on-device assistive system for people with limited mobility, speech difficulties, or early cognitive decline — plus a caregiver dashboard for visibility without being intrusive.
 
 > **Elevator pitch:** camera-first interaction (hand gestures, air writing, sign input) combined with a dementia-support layer — teach personal objects, guide daily routines, trigger calm reminders, and share a caregiver dashboard. Everything runs locally for privacy and low friction.
