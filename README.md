@@ -35,17 +35,27 @@ Standard keyboards and phones are hard to use for the primary users, while famil
 
 ## Run locally
 
-Requires Python 3 with the project's dependencies (MediaPipe, Flask, OpenCV — see the source imports).
+Requires Python 3.9+.
 
 ```bash
-# Main app (virtual keyboard, air writing, ASL, MEMO mode)
-python memory_mate.py          # serves on http://localhost:5000
+# 1) Install the core deps (fast, reliable — everything the web app needs)
+pip install -r requirements-core.txt
 
-# Caregiver dashboard (separate process)
-python caregiver_web.py
+# 2) Start the app (patient + caregiver in one process)
+python memory_mate.py          # serves on http://localhost:5000
 ```
 
-`caregiver_dashboard.py` is the local Flask dashboard for objects, routines, tasks, and logs.
+Open http://localhost:5000 — patient pages (`/`, `/objects`, `/family`,
+`/comfort`, `/tasks`, `/today`) and the caregiver console at `/caregiver`.
+
+> **Optional — camera/gesture modes (GRID / AIR / ASL / ASSIST):** those
+> modules additionally need MediaPipe, PyAutoGUI, pytesseract (plus the
+> tesseract binary), and the rest of `requirements.txt`. The main app does
+> not require them.
+
+Standalone helpers: `caregiver_dashboard.py` is the local Flask dashboard
+for objects, routines, tasks, and logs; `caregiver_web.py` is the older
+caregiver server.
 
 ## Privacy
 

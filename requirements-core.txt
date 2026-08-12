@@ -1,0 +1,8 @@
+# Minimal deps to run the main app: python memory_mate.py
+# Everything here installs cleanly on Python 3.9+ (no native binaries
+# beyond OpenCV's wheels). The heavy camera/gesture modules live in
+# requirements.txt and are only needed for GRID/AIR/ASL modes.
+flask>=3.0
+numpy>=1.24
+opencv-python>=4.8
+pyttsx3>=2.90
