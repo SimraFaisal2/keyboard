@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MemoryMate</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #eef4f8;
+    color: #1f2d3d;
+    display: flex; flex-direction: column;
+  }
+  /* big calm header */
+  header {
+    background: #ffffff;
+    padding: 18px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 3px solid #b8d4e8;
+    flex-wrap: wrap; gap: 10px;
+  }
+  header h1 { font-size: 26px; color: #2c5f8a; }
+  header .hi { font-size: 20px; color: #5a7389; }
+  main { flex: 1; padding: 28px; max-width: 1100px; margin: 0 auto; width: 100%; }
+  .alert {
+    display: none; margin: 0 0 20px 0; padding: 22px 26px;
+    font-size: 26px; border-radius: 14px; font-weight: 600;
+    background: #2c5f8a; color: #fff; position: relative;
+  }
+  .alert.show { display: block; }
+  .alert button {
+    position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+    font-size: 22px; padding: 10px 18px; border: none; border-radius: 10px;
+    background: #fff; color: #2c5f8a; cursor: pointer; font-weight: 700;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+  a.big {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; min-height: 180px; background: #ffffff; border: 3px solid #cfe0ec;
+    border-radius: 18px; text-decoration: none; color: #1f2d3d;
+    box-shadow: 0 4px 10px rgba(31,45,61,0.08); transition: transform .1s, background .1s;
+  }
+  a.big:hover { background: #e3f0f9; transform: translateY(-2px); }
+  a.big .ico { font-size: 54px; }
+  a.big .lbl { font-size: 24px; font-weight: 700; }
+  a.big .sub { font-size: 16px; color: #6b8299; }
+  .back { display: inline-block; margin-bottom: 18px; font-size: 20px; font-weight: 700;
+          color: #2c5f8a; text-decoration: none; }
+  h2.page-title { font-size: 30px; margin-bottom: 20px; color: #2c5f8a; }
+  /* object list */
+  .obj-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  button.obj {
+    font-size: 24px; font-weight: 700; padding: 26px 20px; border: 3px solid #cfe0ec;
+    border-radius: 14px; background: #fff; color: #1f2d3d; cursor: pointer;
+  }
+  button.obj:hover { background: #e3f0f9; }
+  .loc-answer {
+    margin-top: 22px; padding: 26px; font-size: 30px; font-weight: 700; text-align: center;
+    background: #2c5f8a; color: #fff; border-radius: 14px; min-height: 90px;
+  }
+  /* family */
+  .fam-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+  .fam { background: #fff; border: 3px solid #cfe0ec; border-radius: 14px; padding: 22px; text-align: center; }
+  .fam .name { font-size: 26px; font-weight: 700; }
+  .fam .rel { font-size: 18px; color: #6b8299; margin: 6px 0 14px; }
+  button.greet {
+    font-size: 18px; font-weight: 700; padding: 12px 22px; border: none;
+    border-radius: 10px; background: #4a90c2; color: #fff; cursor: pointer;
+  }
+  /* comfort */
+  .comfort-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; }
+  button.mood {
+    min-height: 150px; font-size: 26px; font-weight: 700; border: none; border-radius: 16px;
+    cursor: pointer; color: #fff;
+  }
+  .comfort-msg { margin-top: 22px; padding: 26px; font-size: 30px; font-weight: 700;
+                 text-align: center; background: #fff; border: 3px solid #cfe0ec;
+                 border-radius: 14px; min-height: 90px; color: #1f2d3d; }
+  /* tasks */
+  .step-card {
+    background: #fff; border: 3px solid #cfe0ec; border-radius: 16px; padding: 30px; text-align: center;
+  }
+  .step-card .step-no { font-size: 20px; color: #6b8299; margin-bottom: 10px; }
+  .step-card .step-text { font-size: 30px; font-weight: 700; margin-bottom: 24px; }
+  .task-btns { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+  .task-btns button {
+    font-size: 24px; font-weight: 700; padding: 22px 40px; border: none; border-radius: 12px; cursor: pointer; color: #fff;
+  }
+  /* today list */
+  .list-card { background: #fff; border: 3px solid #cfe0ec; border-radius: 14px; padding: 22px; margin-bottom: 16px; }
+  .list-card .t { font-size: 22px; font-weight: 700; color: #2c5f8a; }
+  .list-card .d { font-size: 20px; margin-top: 6px; color: #1f2d3d; }
+  footer { padding: 16px 28px; font-size: 15px; color: #8aa0b5; text-align: center; }
+  footer a { color: #4a90c2; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧠 MemoryMate</h1>
+  <div class="hi">Hi {{ name }}</div>
+</header>
+
+<div class="alert" id="alert">
+  <span id="alert-text"></span>
+  <button onclick="dismissAlert()">OK</button>
+</div>
+
+<main>
+  {% if page == "home" %}
+    <div class="grid">
+      <a class="big" href="/objects"><span class="ico">🔍</span><span class="lbl">Where's my stuff?</span><span class="sub">Find your things</span></a>
+      <a class="big" href="/family"><span class="ico">👨‍👩‍👧‍👦</span><span class="lbl">My family</span><span class="sub">Loved ones</span></a>
+      <a class="big" href="/comfort"><span class="ico">💜</span><span class="lbl">Comfort me</span><span class="sub">When I feel upset</span></a>
+      <a class="big" href="/tasks"><span class="ico">✅</span><span class="lbl">My tasks</span><span class="sub">Step by step</span></a>
+      <a class="big" href="/today"><span class="ico">📅</span><span class="lbl">Today</span><span class="sub">Reminders</span></a>
+    </div>
+
+  {% elif page == "objects" %}
+    <a class="back" href="/">← Home</a>
+    <h2 class="page-title">🔍 Where's my stuff?</h2>
+    {% if objects %}
+      <div class="obj-list">
+        {% for o in objects %}
+          <button class="obj" onclick="locate('{{ o.name }}')">{{ o.name }}</button>
+        {% endfor %}
+      </div>
+      <div class="loc-answer" id="loc-answer"></div>
+    {% else %}
+      <div class="list-card"><div class="d">No objects yet. Your caregiver can add them.</div></div>
+    {% endif %}
+
+  {% elif page == "family" %}
+    <a class="back" href="/">← Home</a>
+    <h2 class="page-title">👨‍👩‍👧‍👦 My family</h2>
+    {% if members %}
+      <div class="fam-grid">
+        {% for m in members %}
+          <div class="fam">
+            <div class="name">{{ m.name }}</div>
+            <div class="rel">{{ m.relation }}
+              {% if m.last_visit %} · visited {{ m.last_visit[:10] }}{% endif %}</div>
+            <button class="greet" onclick="sayHello('{{ m.id }}')">Say hello 👋</button>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="list-card"><div class="d">No family added yet.</div></div>
+    {% endif %}
+
+  {% elif page == "comfort" %}
+    <a class="back" href="/">← Home</a>
+    <h2 class="page-title">💜 Comfort me</h2>
+    <div class="comfort-grid">
+      <button class="mood" style="background:#4a90c2" onclick="comfort('anxiety')">Anxious</button>
+      <button class="mood" style="background:#7a6aa8" onclick="comfort('confusion')">Confused</button>
+      <button class="mood" style="background:#c07a3a" onclick="comfort('agitation')">Agitated</button>
+      <button class="mood" style="background:#5a9e7a" onclick="comfort('loneliness')">Lonely</button>
+    </div>
+    <div class="comfort-msg" id="comfort-msg"></div>
+
+  {% elif page == "tasks" %}
+    <a class="back" href="/">← Home</a>
+    <h2 class="page-title">✅ My tasks</h2>
+    {% if task and task.current_step %}
+      <div class="step-card">
+        <div class="step-no">Step {{ task.current_step_index + 1 }} of {{ task.steps|length }} · {{ task.title }}</div>
+        <div class="step-text">{{ task.current_step.instruction }}</div>
+        <div class="task-btns">
+          <button style="background:#3f9d63" onclick="taskAction('done')">Done ✓</button>
+          <button style="background:#c07a3a" onclick="taskAction('help')">Help</button>
+          <button style="background:#7a8ba0" onclick="taskAction('skip')">Skip</button>
+        </div>
+      </div>
+      <div id="task-result"></div>
+    {% else %}
+      <div class="list-card"><div class="d">No task right now — enjoy your day. 😊</div></div>
+    {% endif %}
+
+  {% elif page == "today" %}
+    <a class="back" href="/">← Home</a>
+    <h2 class="page-title">📅 Today</h2>
+    {% for r in reminders %}
+      {% if r.enabled %}
+      <div class="list-card">
+        <div class="t">{{ r.label }} · {{ r.time }}</div>
+        <div class="d">{{ r.prompt }}</div>
+      </div>
+      {% endif %}
+    {% endfor %}
+    {% for routine, step in due %}
+      <div class="list-card">
+        <div class="t">{{ routine.name }}</div>
+        <div class="d">{{ step.title }}</div>
+      </div>
+    {% endfor %}
+    {% if high %}
+      <div class="list-card">
+        <div class="t">Important things</div>
+        {% for o in high %}
+          <div class="d">⭐ {{ o.name }} — {{ o.location }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endif %}
+</main>
+
+<footer>
+  MemoryMate — calm, simple support · <a href="/caregiver">Caregiver panel</a>
+</footer>
+
+<script>
+  async function post(url, body) {
+    try {
+      const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
+      return await r.json();
+    } catch (e) { return {}; }
+  }
+
+  function showAlert(alert) {
+    const el = document.getElementById('alert');
+    if (!alert || !alert.text) { el.classList.remove('show'); return; }
+    document.getElementById('alert-text').textContent = alert.text;
+    el.classList.add('show');
+  }
+
+  async function dismissAlert() {
+    await post('/api/alert/dismiss');
+    document.getElementById('alert').classList.remove('show');
+  }
+
+  async function locate(name) {
+    const d = await post('/api/object/locate', {name: name});
+    const el = document.getElementById('loc-answer');
+    if (el) el.textContent = d.text || 'I could not find that one.';
+  }
+
+  async function sayHello(id) {
+    await post('/api/family/' + id + '/visit');
+  }
+
+  async function comfort(emotion) {
+    const d = await post('/api/comfort', {emotion: emotion});
+    const el = document.getElementById('comfort-msg');
+    if (el) el.textContent = d.text || '';
+  }
+
+  async function taskAction(action) {
+    const d = await post('/api/tasks/' + action);
+    if (d && d.task && d.task.complete) {
+      location.reload();
+    } else if (d && d.task && d.task.instruction) {
+      location.reload();
+    } else {
+      const el = document.getElementById('task-result');
+      if (el) el.innerHTML = '<div class="list-card" style="margin-top:16px"><div class="d">' + (d.text || 'Okay.') + '</div></div>';
+    }
+  }
+
+  // poll for server-announced alerts (reminders, greetings, tasks…)
+  setInterval(async () => {
+    try {
+      const r = await fetch('/api/state');
+      const s = await r.json();
+      showAlert(s.alert);
+    } catch (e) {}
+  }, 4000);
+</script>
+</body>
+</html>

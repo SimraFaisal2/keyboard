@@ -3,6 +3,11 @@ caregiver_web.py — Enhanced caregiver dashboard (Phases 2-5).
 View objects, manage reminders, monitor activity, manage family.
 """
 
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from flask import Flask, render_template, jsonify, request
 import json
 from datetime import datetime, timedelta
@@ -163,17 +168,19 @@ def dashboard():
 @app.route('/reminders', methods=['GET'])
 def reminders_page():
     """Reminders management page."""
-    return render_template('reminders.html')
+    # Only dashboard.html ships with the app; it covers reminders, family,
+    # and activity, so render it for these routes instead of 404ing.
+    return render_template('dashboard.html')
 
 @app.route('/family', methods=['GET'])
 def family_page():
     """Family management page."""
-    return render_template('family.html')
+    return render_template('dashboard.html')
 
 @app.route('/activity', methods=['GET'])
 def activity_page():
     """Activity log page."""
-    return render_template('activity.html')
+    return render_template('dashboard.html')
 
 # ─── HTML Templates ────────────────────────────────────────────────────────────
 

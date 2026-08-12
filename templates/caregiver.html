@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MemoryMate — Caregiver</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f8; color: #22303f; padding: 24px; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+  header h1 { font-size: 24px; color: #2c5f8a; }
+  header a { font-size: 16px; color: #4a90c2; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 22px; }
+  .stat { background: #fff; border: 1px solid #dde5ec; border-radius: 10px; padding: 16px; }
+  .stat .n { font-size: 30px; font-weight: 700; color: #2c5f8a; }
+  .stat .l { font-size: 13px; color: #6b8299; text-transform: uppercase; letter-spacing: .04em; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px; }
+  .card { background: #fff; border: 1px solid #dde5ec; border-radius: 12px; padding: 18px; margin-bottom: 18px; }
+  .card h2 { font-size: 16px; color: #2c5f8a; margin-bottom: 12px; border-bottom: 2px solid #eef2f6; padding-bottom: 8px; }
+  label { display: block; font-size: 13px; color: #5a7389; margin: 8px 0 4px; }
+  input, select {
+    width: 100%; padding: 9px 10px; font-size: 15px; border: 1px solid #c9d4de;
+    border-radius: 8px; background: #fff;
+  }
+  button {
+    margin-top: 12px; padding: 10px 16px; font-size: 15px; font-weight: 600;
+    border: none; border-radius: 8px; background: #4a90c2; color: #fff; cursor: pointer;
+  }
+  button.green { background: #3f9d63; }
+  button.red { background: #c05555; }
+  button.small { margin: 4px 4px 0 0; padding: 6px 12px; font-size: 13px; }
+  ul { list-style: none; }
+  li { padding: 8px 0; border-bottom: 1px solid #eef2f6; font-size: 15px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .dim { color: #6b8299; font-size: 13px; }
+  .tag { background: #eef2f6; border-radius: 999px; padding: 2px 10px; font-size: 12px; color: #4a5d70; }
+  .tag.med { background: #fdeaea; color: #b04040; }
+  .alert-line { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+  .alert-line .t { color: #8aa0b5; }
+  .msg { margin-top: 10px; font-size: 14px; font-weight: 600; }
+  .msg.ok { color: #3f9d63; } .msg.err { color: #c05555; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🩺 MemoryMate — Caregiver Console</h1>
+  <div><a href="/">Open patient app</a> · <a href="/today">Today view</a></div>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="n">{{ stats.objects }}</div><div class="l">Objects</div></div>
+  <div class="stat"><div class="n">{{ stats.family }}</div><div class="l">Family</div></div>
+  <div class="stat"><div class="n">{{ stats.overdue }}</div><div class="l">Overdue visits</div></div>
+  <div class="stat"><div class="n">{{ stats.tasks }}</div><div class="l">Tasks</div></div>
+</div>
+
+<div class="cols">
+
+  <div>
+    <div class="card">
+      <h2>➕ Add an object</h2>
+      <label>Name</label><input id="o_name" placeholder="e.g. pill bottle">
+      <label>Where it lives</label><input id="o_loc" placeholder="e.g. kitchen counter">
+      <label>Importance</label>
+      <select id="o_imp">
+        <option value="1">1 – misc</option><option value="2" selected>2 – everyday</option>
+        <option value="3">3 – useful</option><option value="4">4 – important</option>
+        <option value="5">5 – medication</option>
+      </select>
+      <label>Note</label><input id="o_note" placeholder="optional">
+      <button onclick="addObject()">Save object</button>
+      <div class="msg" id="o_msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>👪 Add a family member</h2>
+      <label>Name</label><input id="f_name" placeholder="e.g. Sarah">
+      <label>Relation</label><input id="f_rel" placeholder="e.g. daughter">
+      <label>Phone (optional)</label><input id="f_phone" placeholder="555-0001">
+      <button onclick="addFamily()">Add member</button>
+      <div class="msg" id="f_msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>💜 Trigger comfort</h2>
+      <button onclick="comfort('anxiety')">Anxious</button>
+      <button onclick="comfort('confusion')">Confused</button>
+      <button onclick="comfort('agitation')">Agitated</button>
+      <button onclick="comfort('loneliness')">Lonely</button>
+      <div class="msg" id="c_msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>🛡️ Safety check-in</h2>
+      <label>Objects seen (comma-separated)</label>
+      <input id="s_objs" placeholder="e.g. house_keys, coat">
+      <label>Room</label><input id="s_room" placeholder="e.g. hallway">
+      <label><input type="checkbox" id="s_exit" style="width:auto"> Near an exit</label><br>
+      <button onclick="safety()">Evaluate</button>
+      <div class="msg" id="s_msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>👤 Patient profile</h2>
+      <label>Preferred name</label><input id="p_name" value="{{ name }}">
+      <button onclick="saveProfile()">Save</button>
+      <div class="msg" id="p_msg"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>📦 Objects ({{ stats.objects }})</h2>
+      <ul>
+        {% for o in objects %}
+        <li>
+          <span><strong>{{ o.name }}</strong> · {{ o.location or '?' }}
+            {% if o.importance >= 5 %}<span class="tag med">medication</span>
+            {% elif o.importance >= 4 %}<span class="tag">important</span>{% endif %}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>👪 Family ({{ stats.family }})</h2>
+      <ul>
+        {% for m in members %}
+        <li>
+          <span><strong>{{ m.name }}</strong> — {{ m.relation }}
+            <span class="dim">last visit: {{ m.last_visit[:10] if m.last_visit else 'never' }}</span>
+            {% if m.is_overdue_for_visit() %}<span class="tag" style="background:#fdeaea;color:#b04040">overdue</span>{% endif %}
+          </span>
+          <button class="small" onclick="visit('{{ m.id }}')">Record visit</button>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>✅ Guided tasks</h2>
+      <ul>
+        {% for t in tasks %}
+        <li>
+          <span><strong>{{ t.title }}</strong> <span class="dim">{{ t.steps|length }} steps</span></span>
+          {% if active_task and active_task.id == t.id %}
+            <button class="small green" onclick="taskDone()">Step done</button>
+            <button class="small" onclick="taskSkip()">Skip step</button>
+          {% else %}
+            <button class="small" onclick="startTask('{{ t.id }}')">Start</button>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% if active_task and active_task.current_step %}
+        <div class="dim" style="margin-top:8px">Now on: {{ active_task.current_step.instruction }}</div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h2>🔔 Recent announcements</h2>
+      <ul>
+        {% for a in alerts %}
+        <li class="alert-line"><span>{{ a.text }}</span><span class="t">{{ a.time }}</span></li>
+        {% endfor %}
+        {% if not alerts %}<li class="dim">None yet — reminders will appear here.</li>{% endif %}
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>📋 Activity log (last 48h)</h2>
+      <ul>
+        {% for a in activities[:15] %}
+        <li class="alert-line"><span>{{ a.event }}{% if a.details %}: {{ a.details if a.details is string else a.details }}{% endif %}</span><span class="t">{{ a.timestamp[11:19] }}</span></li>
+        {% endfor %}
+        {% if not activities %}<li class="dim">No activity yet.</li>{% endif %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  async function post(url, body) {
+    const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
+    return r.json();
+  }
+  function msg(id, text, ok) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+  async function addObject() {
+    const d = await post('/api/object/add', {
+      name: document.getElementById('o_name').value,
+      location: document.getElementById('o_loc').value,
+      importance: document.getElementById('o_imp').value,
+      note: document.getElementById('o_note').value,
+    });
+    msg('o_msg', d.error || 'Saved ✓', !d.error);
+    if (!d.error) setTimeout(() => location.reload(), 700);
+  }
+  async function addFamily() {
+    const d = await post('/api/family/add', {
+      name: document.getElementById('f_name').value,
+      relation: document.getElementById('f_rel').value,
+      phone: document.getElementById('f_phone').value,
+    });
+    msg('f_msg', d.error || 'Added ✓', !d.error);
+    if (!d.error) setTimeout(() => location.reload(), 700);
+  }
+  async function visit(id) {
+    await post('/api/family/' + id + '/visit');
+    location.reload();
+  }
+  async function comfort(emotion) {
+    const d = await post('/api/comfort', {emotion: emotion});
+    msg('c_msg', d.text || 'Done', true);
+  }
+  async function safety() {
+    const d = await post('/api/safety', {
+      detected_objects: document.getElementById('s_objs').value,
+      room: document.getElementById('s_room').value,
+      near_exit: document.getElementById('s_exit').checked,
+    });
+    msg('s_msg', d.event ? ('⚠️ Possible exit risk (' + d.event.confidence + ')') : 'No concern detected ✓', !d.event);
+  }
+  async function saveProfile() {
+    const d = await post('/api/profile', {preferred_name: document.getElementById('p_name').value});
+    msg('p_msg', d.ok ? 'Saved ✓' : 'Error', d.ok);
+  }
+  async function startTask(id) {
+    const d = await post('/api/tasks/start/' + id);
+    msg('t_msg', d.error || 'Started ✓', !d.error);
+    if (!d.error) setTimeout(() => location.reload(), 700);
+  }
+  async function taskDone() { await post('/api/tasks/done'); location.reload(); }
+  async function taskSkip() { await post('/api/tasks/skip'); location.reload(); }
+</script>
+</body>
+</html>

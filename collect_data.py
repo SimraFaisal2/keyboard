@@ -7,6 +7,11 @@ Each sample is saved as a (30, 63) numpy array under  ./data/{GESTURE}/{seq_id}.
 Run this script ONCE before training. Follow the on-screen prompts.
 """
 
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import cv2
 import numpy as np
 import mediapipe as mp

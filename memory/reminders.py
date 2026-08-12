@@ -224,15 +224,50 @@ class RoutineReminder:
         return None
     
     def get_activity_log(self, hours: int = 24) -> List[dict]:
-        """Retrieve recent activity log."""
+        """Retrieve recent activity log (in-memory + persisted file)."""
         cutoff = datetime.datetime.now() - datetime.timedelta(hours=hours)
-        
+
+        # In-memory entries from this session
+        entries = list(self.activity_log)
+
+        # Entries persisted by previous runs
+        if os.path.exists(self.log_file):
+            try:
+                with open(self.log_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            entries.append(json.loads(line))
+                        except Exception:
+                            continue
+            except Exception as e:
+                print(f"⚠️  Failed to read activity log: {e}")
+
+        # De-duplicate (session entries exist both in memory and on disk)
+        seen = set()
         recent = []
-        for entry in self.activity_log:
-            entry_time = datetime.datetime.fromisoformat(entry["timestamp"])
+        for entry in entries:
+            try:
+                key = (
+                    entry.get("timestamp"),
+                    entry.get("event"),
+                    json.dumps(entry.get("details", {}), sort_keys=True),
+                )
+            except Exception:
+                key = json.dumps(entry, sort_keys=True)
+            if key in seen:
+                continue
+            seen.add(key)
+            try:
+                entry_time = datetime.datetime.fromisoformat(entry["timestamp"])
+            except Exception:
+                continue
             if entry_time >= cutoff:
                 recent.append(entry)
-        
+
+        recent.sort(key=lambda e: e.get("timestamp", ""))
         return recent
     
     def export_activity_report(self, filepath: str = "memory/activity_report.json"):

@@ -140,11 +140,13 @@ class MemoSession:
         if not self.teach_session:
             self.teach_session = TeachSession(self.vault, self.tts)
         
-        # Update teaching
-        frame = self.teach_session.update(frame, hand_present)
+        # Update teaching; update() returns a status dict, not a new frame
+        result = self.teach_session.update(frame, hand_present)
+        cv2.putText(frame, (result.get("message", "") or "")[:56], (45, 230),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.85, self.ux.COLORS["text_primary"], 2)
         
         # Check if teaching completed
-        if hasattr(self.teach_session, 'state') and self.teach_session.state == "SAVED":
+        if self.teach_session.state == "SAVED":
             self.tts.say("Great job! Your object is saved.")
             self.tts.runAndWait()
             frame = self.ux.show_validation_feedback(frame, "Object saved!", "success")

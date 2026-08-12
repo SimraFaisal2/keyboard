@@ -10,6 +10,11 @@ Modes:
   MEMO   â€” personal object memory (teach & recall for dementia cueing)
 """
 
+# ─── Console encoding: keep emoji prints from crashing on cp1252 terminals ──
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import cv2
 import numpy as np
@@ -606,13 +611,9 @@ def main():
                 button_list = draw_main_menu(frame, active_highlight, progress_pct, draw=False)
             else:
                 button_list = draw_top_nav(frame, active_highlight, progress_pct, input_mode, draw=False)
-                if input_mode == "MEMO" and memo_session:
-                    # draw=False pass: collect MEMO buttons with current hover state
-                    button_list += memo_session.update(
-                        frame, None, -1, -1, typed_text,
-                        hover_key=active_highlight, progress=progress_pct, draw=False
-                    )[0]
-                elif input_mode not in ("ASSIST", "AIR"):
+                # MEMO buttons are collected in the hand / no-hand branches below
+                # so the state machine runs exactly once per frame with real hand data.
+                if input_mode not in ("ASSIST", "AIR", "MEMO"):
                     button_list += draw_keyboard(frame, predictions=predictions,
                                                  mode=input_mode,
                                                  theme_idx=current_theme,
@@ -698,19 +699,6 @@ def main():
                             px,py=cx,cy; last_draw=time.time()
                         else:
                             px,py=0,0
-                        if last_draw>0 and (time.time()-last_draw)>1.5:
-                            try:
-                                gray=cv2.cvtColor(drawing_canvas,cv2.COLOR_BGR2GRAY)
-                                gray=cv2.bitwise_not(gray)
-                                gray=cv2.dilate(gray,np.ones((5,5),np.uint8),iterations=2)
-                                gray=cv2.copyMakeBorder(gray,100,100,100,100,
-                                                        cv2.BORDER_CONSTANT,value=[255,255,255])
-                                det=pytesseract.image_to_string(
-                                    gray,config='--psm 10 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-                                ).strip()
-                                if det: typed_text+=det; pyautogui.typewrite(det)
-                            except: pass
-                            drawing_canvas=np.zeros_like(frame); last_draw=0.0
 
                     # â”€â”€ ASL mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     elif input_mode == "ASL":
@@ -735,7 +723,8 @@ def main():
                     # â”€â”€ MEMO mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     elif input_mode == "MEMO":
                         if memo_session:
-                            button_list, typed_text = memo_session.update(frame, lm, cx, cy, typed_text)
+                            memo_buttons, typed_text = memo_session.update(frame, lm, cx, cy, typed_text, draw=False)
+                            button_list += memo_buttons
                         else:
                             cv2.putText(frame, "MEMO init failed", (50, 350), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
@@ -802,6 +791,8 @@ def main():
                                 drawing_canvas=np.zeros_like(frame)
                                 asl_stable=""; trail.clear()
                                 frame_buffer.clear(); assist_gesture=""
+                                if input_mode == "MEMO" and memo_session:
+                                    memo_session.on_enter()
                             elif kid=="MAIN_MENU":
                                 input_mode = "MAIN_MENU"
                                 escape_start = 0.0
@@ -809,6 +800,8 @@ def main():
                                 input_mode = kid
                                 drawing_canvas = np.zeros_like(frame)
                                 asl_stable = ""; trail.clear(); typed_text = ""
+                                if kid == "MEMO" and memo_session:
+                                    memo_session.on_enter()
                             elif kid=="CLEAR_CANVAS": drawing_canvas=np.zeros_like(frame)
                             elif kid=="THEME":        current_theme=(current_theme+1)%len(THEMES)
                             elif kid=="SPEAK":
@@ -845,11 +838,32 @@ def main():
                                         alert_color,assist_alert_until)
                 elif input_mode=="MEMO" and memo_session:
                     # No hand — still refresh button list for hover detection; draw happens later
-                    button_list, typed_text = memo_session.update(
+                    memo_buttons, typed_text = memo_session.update(
                         frame, None, -1, -1, typed_text,
                         hover_key=None, progress=0.0, draw=False
                     )
+                    button_list += memo_buttons
                 asl_stable=""
+
+            # AIR mode: auto-read the canvas after 1.5s of no drawing — runs
+            # whether or not the hand is still visible (lift hand to submit).
+            if input_mode == "AIR" and last_draw > 0 and (time.time() - last_draw) > 1.5:
+                try:
+                    gray = cv2.cvtColor(drawing_canvas, cv2.COLOR_BGR2GRAY)
+                    gray = cv2.bitwise_not(gray)
+                    gray = cv2.dilate(gray, np.ones((5, 5), np.uint8), iterations=2)
+                    gray = cv2.copyMakeBorder(gray, 100, 100, 100, 100,
+                                              cv2.BORDER_CONSTANT, value=[255, 255, 255])
+                    det = pytesseract.image_to_string(
+                        gray, config='--psm 10 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+                    ).strip()
+                    if det:
+                        typed_text += det
+                        pyautogui.typewrite(det)
+                except Exception:
+                    pass
+                drawing_canvas = np.zeros_like(frame)
+                last_draw = 0.0
 
             if vis_key and (time.time()-vis_time<0.15): active_highlight=vis_key
 
@@ -858,10 +872,12 @@ def main():
             else:
                 draw_top_nav(frame, hover_key=active_highlight, progress=progress_pct, mode=input_mode, draw=True)
                 if input_mode == "MEMO" and memo_session:
-                    # draw=True pass: render MEMO UI with resolved hover state
+                    # draw=True pass: render MEMO UI with resolved hover state.
+                    # run_state=False → paint only, never re-runs the state machine.
                     memo_session.update(
                         frame, None, -1, -1, typed_text,
-                        hover_key=active_highlight, progress=progress_pct, draw=True
+                        hover_key=active_highlight, progress=progress_pct,
+                        draw=True, run_state=False
                     )
                 elif input_mode not in ("ASSIST", "AIR"):
                     if input_mode == "GRID":

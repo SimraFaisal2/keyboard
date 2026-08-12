@@ -13,6 +13,12 @@ States
   NAMING     – ask user to say the name (voice) or type it.
 """
 
+# ─── Console encoding: keep emoji prints from crashing on cp1252 terminals ──
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 import cv2
 import numpy as np
 import time
@@ -166,9 +172,16 @@ class MemoSession:
         hover_key=None,
         progress: float = 0.0,
         draw: bool = True,
+        run_state: bool = True,
     ) -> Tuple[List, str]:
         """
         Process one frame.  Returns (button_list, typed_text).
+
+        - `run_state=False` only renders the UI (no state-machine tick), so the
+          caller can re-draw the frame after hover detection without mutating
+          the session twice per frame.
+        - With `draw=False` the state machine still runs and the current
+          button geometry is returned, but nothing is painted.
         """
         h, w = frame.shape[:2]
 
@@ -176,25 +189,30 @@ class MemoSession:
         if not self._catalog:
             self._catalog = self.vault.get_all_embeddings()
 
-        # ── State machine ────────────────────────────────────────────────────
-        if self.state == "WATCHING":
-            typed_text = self._tick_watching(frame, lm, cx, cy, w, h)
+        # ── State machine (runs at most once per frame) ──────────────────────
+        if run_state:
+            if self.state == "WATCHING":
+                typed_text = self._tick_watching(frame, lm, cx, cy, w, h, typed_text)
 
-        elif self.state == "CAPTURING":
-            typed_text = self._tick_capturing(frame, lm, cx, cy, w, h)
+            elif self.state == "CAPTURING":
+                typed_text = self._tick_capturing(frame, lm, cx, cy, w, h, typed_text)
 
-        elif self.state == "NAMING":
-            typed_text = self._tick_naming(frame, lm, cx, cy, w, h)
+            elif self.state == "NAMING":
+                typed_text = self._tick_naming(frame, lm, cx, cy, w, h, typed_text)
 
         # ── Draw UI ──────────────────────────────────────────────────────────
-        button_list = []
         if draw:
-            button_list = self._draw_ui(frame, hover_key, progress, w, h)
+            return self._draw_ui(frame, hover_key, progress, w, h), typed_text
+
+        # No drawing: still hand back the button geometry so hover works
+        button_list = []
+        if self.state == "NAMING":
+            button_list = self._naming_buttons(w, h)
 
         return button_list, typed_text
 
     # ─── State: WATCHING ─────────────────────────────────────────────────────
-    def _tick_watching(self, frame, lm, cx, cy, w, h):
+    def _tick_watching(self, frame, lm, cx, cy, w, h, typed_text: str = ""):
         now = time.time()
 
         if lm and now - self.last_match_t >= MATCH_INTERVAL and self._catalog:
@@ -228,10 +246,10 @@ class MemoSession:
         else:
             self.pinch_active = False
 
-        return ""   # typed_text unchanged
+        return typed_text
 
     # ─── State: CAPTURING ────────────────────────────────────────────────────
-    def _tick_capturing(self, frame, lm, cx, cy, w, h):
+    def _tick_capturing(self, frame, lm, cx, cy, w, h, typed_text: str = ""):
         if lm:
             crop, _ = self._hand_roi(lm, w, h, frame)
             if crop is not None and crop.size > 0:
@@ -252,10 +270,10 @@ class MemoSession:
             self.teach_crops = []
             self.status_msg  = "Hand lost. Try again."
 
-        return ""
+        return typed_text
 
     # ─── State: NAMING ───────────────────────────────────────────────────────
-    def _tick_naming(self, frame, lm, cx, cy, w, h):
+    def _tick_naming(self, frame, lm, cx, cy, w, h, typed_text: str = ""):
         # Voice result arrived
         if not self._listening and self._listen_result is not None:
             name = self._listen_result
@@ -266,7 +284,7 @@ class MemoSession:
         elif not self._listening and self._listen_result is None and self.teach_name_buf == "":
             self.status_msg = "Couldn't hear. Type the name below and hover SAVE."
 
-        return ""
+        return typed_text
 
     # ─── Draw ────────────────────────────────────────────────────────────────
     def _draw_ui(self, frame, hover_key, progress, w, h) -> List:
@@ -356,8 +374,35 @@ class MemoSession:
                     (30, h // 2 + 65),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, C_WHITE, 2)
 
-    def _draw_naming(self, frame, hover_key, progress, w, h) -> List:
+    def _naming_buttons(self, w, h) -> List:
+        """Button geometry for the NAMING on-screen keyboard (no drawing)."""
         button_list = []
+
+        # Mini A-Z keyboard
+        kw, kh, gap = 46, 40, 4
+        rows  = [list("ABCDEFGHI"), list("JKLMNOPQR"), list("STUVWXYZ")]
+        y0    = h // 2 + 70
+        for ri, row in enumerate(rows):
+            for ci, ch in enumerate(row):
+                x   = 30 + ci * (kw + gap)
+                y   = y0 + ri * (kh + gap)
+                button_list.append([f"MEMO_KEY_{ch}", x, y, kw, kh, (50, 70, 100), ch])
+
+        # Special keys: SPACE  BACK  SAVE  LISTEN
+        sy = y0 + 3 * (kh + gap)
+        specials = [
+            ("MEMO_KEY_SPACE", "SPACE",        30,   130, (50, 90, 50)),
+            ("MEMO_KEY_BACK",  "BACK",        170,    90, (80, 50, 50)),
+            ("MEMO_SAVE_NAME", "SAVE ✓",      270,   100, (30,110, 50)),
+            ("MEMO_LISTEN",    "🎤 RE-LISTEN", 380,   160, (70, 50,100)),
+        ]
+        for kid, label, bx, bw, base_col in specials:
+            button_list.append([kid, bx, sy, bw, kh, base_col, label])
+
+        return button_list
+
+    def _draw_naming(self, frame, hover_key, progress, w, h) -> List:
+        button_list = self._naming_buttons(w, h)
 
         # Listening indicator
         if self._listening:
@@ -380,47 +425,23 @@ class MemoSession:
         cv2.putText(frame, display[-30:], (42, h // 2 + 32),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, C_WHITE, 2)
 
-        # Mini A-Z keyboard
-        kw, kh, gap = 46, 40, 4
-        rows  = [list("ABCDEFGHI"), list("JKLMNOPQR"), list("STUVWXYZ")]
-        y0    = h // 2 + 70
-        for ri, row in enumerate(rows):
-            for ci, ch in enumerate(row):
-                x   = 30 + ci * (kw + gap)
-                y   = y0 + ri * (kh + gap)
-                kid = f"MEMO_KEY_{ch}"
-                hov = hover_key and hover_key[0] == kid
-                col = C_PINK if hov else (50, 70, 100)
-                cv2.rectangle(frame, (x, y), (x + kw, y + kh), col, -1)
-                cv2.rectangle(frame, (x, y), (x + kw, y + kh), (100, 140, 180), 1)
-                cv2.putText(frame, ch, (x + 13, y + 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, C_WHITE, 2)
-                if hov:
-                    pw = int(kw * progress)
-                    cv2.rectangle(frame, (x + 2, y + kh - 5),
-                                  (x + pw - 2, y + kh - 2), (255, 230, 80), -1)
-                button_list.append([kid, x, y, kw, kh, col, ch])
-
-        # Special keys: SPACE  BACK  SAVE  LISTEN
-        sy = y0 + 3 * (kh + gap)
-        specials = [
-            ("MEMO_KEY_SPACE", "SPACE",  30,  130, (50, 90, 50)),
-            ("MEMO_KEY_BACK",  "BACK",  170,   90, (80, 50, 50)),
-            ("MEMO_SAVE_NAME", "SAVE ✓",270,  100, (30,110, 50)),
-            ("MEMO_LISTEN",    "🎤 RE-LISTEN", 380, 160, (70, 50,100)),
-        ]
-        for kid, label, bx, bw, base_col in specials:
+        # Draw each button (letters + specials)
+        for item in button_list:
+            kid, x, y, bw, bh, base_col, label = item
             hov = hover_key and hover_key[0] == kid
             col = C_PINK if hov else base_col
-            cv2.rectangle(frame, (bx, sy), (bx + bw, sy + kh), col, -1)
-            cv2.rectangle(frame, (bx, sy), (bx + bw, sy + kh), (120, 180, 140), 1)
-            cv2.putText(frame, label, (bx + 8, sy + 27),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, C_WHITE, 2)
+            cv2.rectangle(frame, (x, y), (x + bw, y + bh), col, -1)
+            cv2.rectangle(frame, (x, y), (x + bw, y + bh), (100, 140, 180), 1)
+            if len(kid) == 10 and kid.startswith("MEMO_KEY_"):
+                cv2.putText(frame, label, (x + 13, y + 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, C_WHITE, 2)
+            else:
+                cv2.putText(frame, label, (x + 8, y + 27),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, C_WHITE, 2)
             if hov:
                 pw = int(bw * progress)
-                cv2.rectangle(frame, (bx + 3, sy + kh - 5),
-                              (bx + pw - 3, sy + kh - 2), (255, 230, 80), -1)
-            button_list.append([kid, bx, sy, bw, kh, col, label])
+                cv2.rectangle(frame, (x + 2, y + bh - 5),
+                              (x + pw - 2, y + bh - 2), (255, 230, 80), -1)
 
         return button_list
 
@@ -442,7 +463,8 @@ class MemoSession:
                 self._listen_result = None
                 self._start_listening()
                 self.status_msg = "Listening… say the name now."
-        elif button_id.startswith("MEMO_KEY_") and len(button_id) == 10:
+        elif button_id.startswith("MEMO_KEY_"):
+            # Remaining MEMO_KEY_ ids are single letters (SPACE/BACK handled above)
             self.teach_name_buf += button_id[-1]
         return typed_text
 

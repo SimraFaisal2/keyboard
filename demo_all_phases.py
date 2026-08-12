@@ -6,6 +6,9 @@ Run this to see the complete dementia memory system in action.
 
 import sys
 sys.path.insert(0, '.')
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from memory.object_model import EnhancedMemoryVault, PersonalObject
 from memory.teach_module import TeachSession
