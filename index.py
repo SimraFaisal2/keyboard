@@ -502,6 +502,62 @@ def draw_face_overlay(frame, overlay, hover_key=None, progress=0.0,
     return buttons
 
 
+# ─── Voice enrollment helpers (FACE mode) ──────────────────────────────────
+def _listen_for_name():
+    """Record a short utterance and recognize a spoken name (best-effort).
+
+    Returns (name | None, message). Uses speech_recognition with the Google
+    recognizer; falls back gracefully if the mic or service fails.
+    """
+    try:
+        import speech_recognition as sr
+    except ImportError:
+        return None, "speech module missing"
+    try:
+        r = sr.Recognizer()
+        with sr.Microphone() as source:
+            r.adjust_for_ambient_noise(source, duration=0.6)
+            audio = r.listen(source, timeout=2.5, phrase_time_limit=3.5)
+        try:
+            text = r.recognize_google(audio, language="en-US").strip().title()
+        except sr.UnknownValueError:
+            return None, "couldn't hear a clear name"
+        except sr.RequestError:
+            return None, "speech service unreachable"
+        except Exception:
+            return None, "speech failed"
+        first = text.split()[0] if text else ""
+        return (first or None), (f"heard: {first}" if first else "heard nothing")
+    except Exception as e:
+        return None, f"mic error: {e}"
+
+
+def _listen_worker(holder):
+    """Runs _listen_for_name in a background thread (mic is blocking)."""
+    res, msg = _listen_for_name()
+    holder["name"] = res
+    holder["msg"] = msg
+    holder["done"] = True
+
+
+def _save_learned(tts, face_id, nm, samples):
+    """Persist enrollment samples under known_faces/<name>/ and retrain."""
+    legacy = os.path.join("known_faces", f"{nm}.jpg")
+    if os.path.exists(legacy):
+        os.remove(legacy)   # replace any old single-photo entry
+    d = os.path.join("known_faces", nm)
+    os.makedirs(d, exist_ok=True)
+    for i, s in enumerate(samples[:15]):
+        cv2.imwrite(os.path.join(d, f"sample_{i:02d}.jpg"), s)
+    n = face_id.reload()
+    try:
+        tts.say(f"Learned {nm}. I now know {n} people.")
+        tts.runAndWait()
+    except Exception:
+        pass
+    return n
+
+
 def check_escape_gesture(results, frame_w, frame_h):
     """Return True if both hands are open palms (escape gesture)."""
     if not results.multi_hand_landmarks or len(results.multi_hand_landmarks) < 2:
@@ -952,13 +1008,17 @@ def main():
               "ℹ️  FACE mode ready — no known_faces/ photos yet; drop <name>.jpg to enable ID")
     face_overlay      = []      # (x, y, w, h, name, conf) from the last detection
     face_announce_until = 0.0   # cooldown so we don't say hello every frame
-    # multi-sample enrollment: LEARN collects several frames over ~2 s so
-    # LBPH has real pose/lighting variety instead of one fragile sample
-    face_learn_name    = ""
-    face_learn_until   = 0.0
-    face_learn_samples = []
-    face_learn_last    = 0.0
-    face_learn_status  = ""
+    # voice enrollment: LEARN collects face frames over ~2 s, then asks the
+    # user to SAY their name; the next time the face appears the app greets
+    # them by name. phases: "" -> "capturing" -> "listening"
+    face_learn_phase    = ""
+    face_learn_name     = ""
+    face_learn_until    = 0.0
+    face_learn_timeout  = 0.0
+    face_learn_samples  = []
+    face_learn_last     = 0.0
+    face_learn_status   = ""
+    face_listen         = {"name": None, "msg": "", "done": False}
 
     # Per-frame UI state — initialised here so frame-1 never raises UnboundLocalError
     active_highlight = None
@@ -988,52 +1048,65 @@ def main():
                     name, conf = face_id.identify(crop)
                     face_overlay.append((fx, fy, fw, fh, name, conf))
 
-                # multi-sample enrollment capture (works with or without a hand)
+                # ── enrollment state machine (works with or without a hand) ──
+                #   capturing: collect face frames for ~2 s
+                #   listening: prompt the name, then recognize it from the mic
                 now = time.time()
-                if face_learn_name and now < face_learn_until:
-                    largest = max(face_overlay, key=lambda b: b[2] * b[3], default=None)
-                    if largest is None:
-                        face_learn_status = f"capturing {face_learn_name}... face not in view"
-                    elif now - face_learn_last > 0.18:
-                        fx, fy, fw, fh = largest[:4]
-                        # pad the crop ~25% so the face fills the frame
-                        # consistently across samples
-                        px, py = int(fw * 0.25), int(fh * 0.25)
-                        x0, y0 = max(0, fx - px), max(0, fy - py)
-                        x1, y1 = min(w, fx + fw + px), min(h, fy + fh + py)
-                        crop = frame[y0:y1, x0:x1]
-                        if crop.size:
-                            face_learn_samples.append(crop)
-                            face_learn_last = now
+                if face_learn_phase == "capturing":
+                    if now < face_learn_until:
+                        largest = max(face_overlay, key=lambda b: b[2] * b[3], default=None)
+                        if largest is None:
                             face_learn_status = (f"capturing {face_learn_name}... "
-                                                 f"{len(face_learn_samples)} samples")
-                elif face_learn_name and now >= face_learn_until:
-                    # capture window closed — save, retrain, announce
-                    nm = face_learn_name
-                    face_learn_name = ""
-                    face_learn_status = ""
-                    if face_learn_samples:
-                        try:
-                            # replace any old single-photo entry with the folder
-                            legacy = os.path.join("known_faces", f"{nm}.jpg")
-                            if os.path.exists(legacy):
-                                os.remove(legacy)
-                            d = os.path.join("known_faces", nm)
-                            os.makedirs(d, exist_ok=True)
-                            for i, s in enumerate(face_learn_samples[:15]):
-                                cv2.imwrite(os.path.join(d, f"sample_{i:02d}.jpg"), s)
-                            n = face_id.reload()
-                            try:
-                                tts.say(f"Learned {nm}. I now know {n} people.")
-                                tts.runAndWait()
-                            except Exception:
-                                pass
-                            print(f"✅ Learned {nm} from {len(face_learn_samples)} samples - {n} known")
-                        except Exception as e:
-                            print(f"⚠️  LEARN failed: {e}")
+                                                 f"face not in view")
+                        elif now - face_learn_last > 0.18:
+                            fx, fy, fw, fh = largest[:4]
+                            # pad the crop ~25% so the face fills the frame
+                            # consistently across samples
+                            px, py = int(fw * 0.25), int(fh * 0.25)
+                            x0, y0 = max(0, fx - px), max(0, fy - py)
+                            x1, y1 = min(w, fx + fw + px), min(h, fy + fh + py)
+                            crop = frame[y0:y1, x0:x1]
+                            if crop.size:
+                                face_learn_samples.append(crop)
+                                face_learn_last = now
+                                face_learn_status = (f"capturing {face_learn_name}... "
+                                                     f"{len(face_learn_samples)} samples")
                     else:
-                        print("⚠️  LEARN skipped - no face samples captured")
-                    face_learn_samples = []
+                        # capture window closed — ask for the spoken name
+                        face_learn_phase = "listening"
+                        face_learn_status = "SAY YOUR NAME NOW..."
+                        face_learn_timeout = now + 9.0
+                        face_listen = {"name": None, "msg": "", "done": False}
+                        try:
+                            tts.say("Say your name now")
+                            tts.runAndWait()
+                        except Exception:
+                            pass
+                        threading.Thread(target=_listen_worker,
+                                         args=(face_listen,), daemon=True).start()
+                elif face_learn_phase == "listening":
+                    if face_listen["done"] or now > face_learn_timeout:
+                        nm = face_listen.get("name")
+                        if not nm:
+                            # recognition failed — fall back to the text box
+                            fb = (typed_text or "Person").strip().split()
+                            nm = fb[0] if fb else "Person"
+                            print(f"⚠️  Voice: {face_listen.get('msg', 'no name')} - "
+                                  f"saved as {nm}")
+                        if face_learn_samples:
+                            try:
+                                _save_learned(tts, face_id, nm, face_learn_samples)
+                                face_learn_status = f"learned {nm}!"
+                                print(f"✅ Learned {nm} from "
+                                      f"{len(face_learn_samples)} samples")
+                            except Exception as e:
+                                face_learn_status = "learn failed - try again"
+                                print(f"⚠️  LEARN failed: {e}")
+                        else:
+                            face_learn_status = "no face samples - try again"
+                            print("⚠️  LEARN skipped - no face samples captured")
+                        face_learn_phase = ""
+                        face_learn_samples = []
 
             # Compute the clickable layout first so the demo pilot can aim at buttons.
             if input_mode == "MAIN_MENU":
@@ -1288,18 +1361,20 @@ def main():
                                     pyautogui.typewrite(word+" ")
                             elif kid == "LEARN_FACE":
                                 if face_id is not None:
-                                    # start a ~2 s multi-sample capture; the
-                                    # per-frame block collects frames and then
-                                    # saves + retrains when the window closes
+                                    # 1) capture ~2 s of face frames, then
+                                    # 2) ask the user to SAY their name, then
+                                    # 3) next time the face appears -> greeting
                                     nm = (typed_text or "Person").strip().split()
                                     nm = nm[0] if nm else "Person"
                                     face_learn_name = nm
+                                    face_learn_phase = "capturing"
                                     face_learn_until = time.time() + 2.0
+                                    face_learn_timeout = 0.0
                                     face_learn_samples = []
                                     face_learn_last = 0.0
                                     face_learn_status = (f"capturing {nm}... "
                                                          "look at the camera")
-                                    print(f"🎥 Capturing {nm} for 2s - look at the camera")
+                                    print(f"🎥 Capturing {nm} for 2s - then say your name")
                             elif kid.startswith("MEMO_"):
                                 if memo_session:
                                     typed_text = memo_session.handle_button(kid, typed_text)
