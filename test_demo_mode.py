@@ -97,13 +97,13 @@ check("GRID typed HELP", typed[:4] == "help")
 check("word suggestion was tapped", any(p[0] == "typewrite" for p in pressed))
 
 phase_labels = set(labels)
-for expected in ["MAIN MENU — entering GRID keyboard",
-                 "GRID — hovering",
-                 "GRID — tapping a word suggestion",
-                 "GRID — switching to AIR writing",
-                 "AIR — pinch-drawing a wave",
-                 "AIR — reading the drawn character…",
-                 "AIR — returning to the menu"]:
+for expected in ["MAIN MENU - entering GRID keyboard",
+                 "GRID - hovering",
+                 "GRID - tapping a word suggestion",
+                 "GRID - switching to AIR writing",
+                 "AIR - pinch-drawing a wave",
+                 "AIR - reading the drawn character...",
+                 "AIR - returning to the menu"]:
     check(f"tour reached: {expected!r}", any(expected in l for l in labels))
 
 print("\n--- sequence of phase labels (dedup) ---")

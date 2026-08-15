@@ -416,7 +416,7 @@ def draw_top_nav(frame, hover_key, progress, mode, draw=True):
         else:
             draw_rounded_rect(frame, (x, y), (x + w, y + h), (18, 23, 36), -1, 12)
         draw_rounded_rect(frame, (x, y), (x + w, y + h), VIOLET, 1, 12)
-        cv2.putText(frame, "‹  MAIN MENU", (x + 18, y + 35),
+        cv2.putText(frame, "<  MAIN MENU", (x + 18, y + 35),
                     cv2.FONT_HERSHEY_DUPLEX, 0.62, (240, 240, 245), 2, cv2.LINE_AA)
         if hovered:
             pw = int(w * progress)
@@ -447,7 +447,7 @@ def draw_top_nav(frame, hover_key, progress, mode, draw=True):
 
 
 def draw_face_overlay(frame, overlay, hover_key=None, progress=0.0,
-                      typed_text="", theme_idx=0, draw=True):
+                      typed_text="", theme_idx=0, draw=True, learn_status=""):
     """FACE mode: green tag on recognised people, amber on strangers, plus a
     LEARN button (enrolls the largest face under the name in the text box).
     ``overlay`` is a list of (x, y, w, h, name, confidence) tuples."""
@@ -460,7 +460,7 @@ def draw_face_overlay(frame, overlay, hover_key=None, progress=0.0,
         for (fx, fy, fw, fh, name, conf) in overlay:
             col = (60, 220, 130) if name else (225, 185, 70)
             cv2.rectangle(frame, (fx, fy), (fx + fw, fy + fh), col, 2, cv2.LINE_AA)
-            label = f"{name} · {conf:.0f}" if name else "unknown"
+            label = f"{name} | {conf:.0f}" if name else "unknown"
             sz = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
             cv2.rectangle(frame, (fx, fy - 30), (fx + fw, fy), col, -1)
             cv2.putText(frame, label, (fx + 8, fy - 9),
@@ -490,7 +490,11 @@ def draw_face_overlay(frame, overlay, hover_key=None, progress=0.0,
             pw = int(bw * progress)
             cv2.rectangle(frame, (bx + 4, by + bh - 7), (bx + 4 + pw, by + bh - 3),
                           (56, 189, 248), -1)
-        if not overlay:
+        if learn_status:
+            sz = cv2.getTextSize(learn_status, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)[0]
+            cv2.putText(frame, learn_status, (bx + (bw - sz[0]) // 2, by + 76),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (56, 189, 248), 1, cv2.LINE_AA)
+        elif not overlay:
             sz = cv2.getTextSize("No face in view", cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)[0]
             cv2.putText(frame, "No face in view", (bx + (bw - sz[0]) // 2, by + 76),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, (140, 150, 165), 1, cv2.LINE_AA)
@@ -563,7 +567,7 @@ def draw_keyboard(frame, highlight_key=None, progress=0.0,
         return button_list
     elif mode == "AIR":
         if draw:
-            cv2.putText(frame, "AIR WRITING — pinch thumb & index to draw",
+            cv2.putText(frame, "AIR WRITING - pinch thumb & index to draw",
                         (60, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (110, 220, 160), 2, cv2.LINE_AA)
             cv2.putText(frame, "Pause 1.5 s to auto-read the character",
                         (60, 218), cv2.FONT_HERSHEY_SIMPLEX, 0.58, T["text_dim"], 1, cv2.LINE_AA)
@@ -669,7 +673,7 @@ def draw_keyboard(frame, highlight_key=None, progress=0.0,
                                   (14, 18, 28) if color == T["key_bg"] else (10, 18, 26), -1, 4)
                 draw_rounded_rect(frame, (x, y), (x + w, y + h),
                                   T["key_border"] if color == T["key_bg"] else (10, 22, 34), 1, 8)
-                disp = {"Space": "SPACE", "<": "⌫"}.get(key, key)
+                disp = {"Space": "SPACE", "<": "DEL"}.get(key, key)
                 fnt_sz = 0.75 if len(key) == 1 else 0.55
                 sz = cv2.getTextSize(disp, cv2.FONT_HERSHEY_SIMPLEX, fnt_sz, 2)[0]
                 txt_col = (8, 14, 24) if color != T["key_bg"] else T["text"]
@@ -725,7 +729,7 @@ class DemoPilot:
         self.phase_start = time.time()
         self.letter_idx = 0
         self.word_start_len = 0
-        self.label = "waiting…"
+        self.label = "waiting..."
 
     # ------------------------------------------------------------ frames
     def next_frame(self):
@@ -801,7 +805,7 @@ class DemoPilot:
                 if len(text) >= self.word_start_len + self.letter_idx + 1:
                     self.letter_idx = min(self.letter_idx + 1, len(self.WORD) - 1)
                     ch = self.WORD[self.letter_idx]
-                self.label = f"GRID — hovering “{ch}”"
+                self.label = f"GRID - hovering '{ch}'"
                 return self._center(self._find(bl, ch)), "point"
         if self.phase == "grid_pred":
             # The only way text grows in this phase is the PRED click itself
@@ -813,12 +817,12 @@ class DemoPilot:
                 if b is None:
                     if now - self.phase_start > 3.0:
                         self.phase, self.phase_start = "air_switch", now
-                    self.label = "GRID — waiting for word suggestions…"
+                    self.label = "GRID - waiting for word suggestions..."
                     return (0.80, 0.58), "point"
-                self.label = "GRID — tapping a word suggestion"
+                self.label = "GRID - tapping a word suggestion"
                 return self._center(b), "point"
         if self.phase == "air_switch":
-            self.label = "GRID — switching to AIR writing"
+            self.label = "GRID - switching to AIR writing"
             return self._center(self._find(bl, "TOGGLE_MODE")), "point"
         if self.phase == "air_draw":
             frac = min((now - self.phase_start) / 3.5, 1.0)
@@ -827,18 +831,18 @@ class DemoPilot:
             else:
                 x = 0.30 + 0.40 * frac
                 y = 0.45 + 0.12 * math.sin(frac * 3 * 2 * math.pi)
-                self.label = "AIR — pinch-drawing a wave"
+                self.label = "AIR - pinch-drawing a wave"
                 return (x, y), "pinch"
         if self.phase == "air_idle":
             if now - self.phase_start > 2.2:
                 self.phase, self.phase_start = "back_to_menu", now
-            self.label = "AIR — reading the drawn character…"
+            self.label = "AIR - reading the drawn character..."
             return (0.78, 0.62), "point"
         if self.phase == "back_to_menu":
-            self.label = "AIR — returning to the menu"
+            self.label = "AIR - returning to the menu"
             return self._center(self._find(bl, "MAIN_MENU")), "point"
 
-        self.label = "MAIN MENU — entering GRID keyboard"
+        self.label = "MAIN MENU - entering GRID keyboard"
         return self._center(self._find(bl, "GRID")), "point"
 
 
@@ -868,9 +872,15 @@ def main():
         global pyautogui
         pyautogui = _SilentKeys()
 
-    # Resizable window scaled to fit small laptop screens (content is 1280x720).
-    cv2.namedWindow("Emergency AI Communication Interface", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Emergency AI Communication Interface", 960, 540)
+    # Resizable window scaled to fit small laptop screens (content is 1280x720),
+    # positioned on-screen (a previous session once restored the window off-screen).
+    WIN_NAME = "Emergency AI Communication Interface"
+    cv2.namedWindow(WIN_NAME, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(WIN_NAME, 960, 540)
+    try:
+        cv2.moveWindow(WIN_NAME, 40, 30)   # cosmetic; fine if it fails headless
+    except cv2.error:
+        pass
 
     tts = pyttsx3.init()
     tts.setProperty('rate', 150)
@@ -942,6 +952,13 @@ def main():
               "ℹ️  FACE mode ready — no known_faces/ photos yet; drop <name>.jpg to enable ID")
     face_overlay      = []      # (x, y, w, h, name, conf) from the last detection
     face_announce_until = 0.0   # cooldown so we don't say hello every frame
+    # multi-sample enrollment: LEARN collects several frames over ~2 s so
+    # LBPH has real pose/lighting variety instead of one fragile sample
+    face_learn_name    = ""
+    face_learn_until   = 0.0
+    face_learn_samples = []
+    face_learn_last    = 0.0
+    face_learn_status  = ""
 
     # Per-frame UI state — initialised here so frame-1 never raises UnboundLocalError
     active_highlight = None
@@ -970,6 +987,53 @@ def main():
                     crop = frame[fy:fy + fh, fx:fx + fw]
                     name, conf = face_id.identify(crop)
                     face_overlay.append((fx, fy, fw, fh, name, conf))
+
+                # multi-sample enrollment capture (works with or without a hand)
+                now = time.time()
+                if face_learn_name and now < face_learn_until:
+                    largest = max(face_overlay, key=lambda b: b[2] * b[3], default=None)
+                    if largest is None:
+                        face_learn_status = f"capturing {face_learn_name}... face not in view"
+                    elif now - face_learn_last > 0.18:
+                        fx, fy, fw, fh = largest[:4]
+                        # pad the crop ~25% so the face fills the frame
+                        # consistently across samples
+                        px, py = int(fw * 0.25), int(fh * 0.25)
+                        x0, y0 = max(0, fx - px), max(0, fy - py)
+                        x1, y1 = min(w, fx + fw + px), min(h, fy + fh + py)
+                        crop = frame[y0:y1, x0:x1]
+                        if crop.size:
+                            face_learn_samples.append(crop)
+                            face_learn_last = now
+                            face_learn_status = (f"capturing {face_learn_name}... "
+                                                 f"{len(face_learn_samples)} samples")
+                elif face_learn_name and now >= face_learn_until:
+                    # capture window closed — save, retrain, announce
+                    nm = face_learn_name
+                    face_learn_name = ""
+                    face_learn_status = ""
+                    if face_learn_samples:
+                        try:
+                            # replace any old single-photo entry with the folder
+                            legacy = os.path.join("known_faces", f"{nm}.jpg")
+                            if os.path.exists(legacy):
+                                os.remove(legacy)
+                            d = os.path.join("known_faces", nm)
+                            os.makedirs(d, exist_ok=True)
+                            for i, s in enumerate(face_learn_samples[:15]):
+                                cv2.imwrite(os.path.join(d, f"sample_{i:02d}.jpg"), s)
+                            n = face_id.reload()
+                            try:
+                                tts.say(f"Learned {nm}. I now know {n} people.")
+                                tts.runAndWait()
+                            except Exception:
+                                pass
+                            print(f"✅ Learned {nm} from {len(face_learn_samples)} samples - {n} known")
+                        except Exception as e:
+                            print(f"⚠️  LEARN failed: {e}")
+                    else:
+                        print("⚠️  LEARN skipped - no face samples captured")
+                    face_learn_samples = []
 
             # Compute the clickable layout first so the demo pilot can aim at buttons.
             if input_mode == "MAIN_MENU":
@@ -1124,7 +1188,8 @@ def main():
                             # resolved hover state so it still paints over the feed)
                             button_list += draw_face_overlay(
                                 frame, face_overlay, hover_key=None, progress=0.0,
-                                typed_text=typed_text, theme_idx=current_theme, draw=False)
+                                typed_text=typed_text, theme_idx=current_theme,
+                                draw=False, learn_status=face_learn_status)
 
                     # GRID mode gestures
                     elif input_mode=="GRID":
@@ -1134,7 +1199,7 @@ def main():
                             if not pinch_active:
                                 pinch_start=time.time()
                                 pinch_active=True
-                                cv2.putText(frame,"â†” PINCH HOLD FOR ASL MODE â†”",(60,50),
+                                cv2.putText(frame,"PINCH HOLD FOR ASL MODE",(60,50),
                                             cv2.FONT_HERSHEY_SIMPLEX,0.75,(0,255,255),2)
                             else:
                                 elapsed_pinch=time.time()-pinch_start
@@ -1222,28 +1287,19 @@ def main():
                                     ws[-1]=word; typed_text=" ".join(ws)+" "
                                     pyautogui.typewrite(word+" ")
                             elif kid == "LEARN_FACE":
-                                if face_id is not None and face_overlay:
-                                    # enroll the largest face under the typed name
-                                    (fx, fy, fw, fh) = max(
-                                        face_overlay, key=lambda b: b[2] * b[3])[:4]
+                                if face_id is not None:
+                                    # start a ~2 s multi-sample capture; the
+                                    # per-frame block collects frames and then
+                                    # saves + retrains when the window closes
                                     nm = (typed_text or "Person").strip().split()
                                     nm = nm[0] if nm else "Person"
-                                    try:
-                                        os.makedirs("known_faces", exist_ok=True)
-                                        crop = frame[fy:fy + fh, fx:fx + fw]
-                                        if crop.size == 0:
-                                            print("⚠️  LEARN skipped — empty face crop")
-                                        else:
-                                            cv2.imwrite(os.path.join("known_faces", f"{nm}.jpg"), crop)
-                                            n = face_id.reload()
-                                        try:
-                                            tts.say(f"Learned {nm}. I now know {n} people.")
-                                            tts.runAndWait()
-                                        except Exception:
-                                            pass
-                                        print(f"✅ Learned face as {nm}.jpg — now {n} known")
-                                    except Exception as e:
-                                        print(f"⚠️  LEARN failed: {e}")
+                                    face_learn_name = nm
+                                    face_learn_until = time.time() + 2.0
+                                    face_learn_samples = []
+                                    face_learn_last = 0.0
+                                    face_learn_status = (f"capturing {nm}... "
+                                                         "look at the camera")
+                                    print(f"🎥 Capturing {nm} for 2s - look at the camera")
                             elif kid.startswith("MEMO_"):
                                 if memo_session:
                                     typed_text = memo_session.handle_button(kid, typed_text)
@@ -1278,7 +1334,7 @@ def main():
             # whether or not the hand is still visible (lift hand to submit).
             if input_mode == "AIR" and last_draw > 0 and (time.time() - last_draw) > 1.5:
                 if not TESSERACT_OK:
-                    air_notice = "OCR unavailable — install tesseract to auto-read"
+                    air_notice = "OCR unavailable - install tesseract to auto-read"
                     air_notice_until = time.time() + 3.0
                 else:
                     try:
@@ -1293,11 +1349,11 @@ def main():
                         if det:
                             typed_text += det
                             pyautogui.typewrite(det)
-                            air_notice = f"✓ read: {det}"
+                            air_notice = f"read: {det}"
                         else:
-                            air_notice = "couldn't read that — draw one clear letter"
+                            air_notice = "couldn't read that - draw one clear letter"
                     except Exception:
-                        air_notice = "OCR failed — try again"
+                        air_notice = "OCR failed - try again"
                     air_notice_until = time.time() + 2.5
                 drawing_canvas = np.zeros_like(frame)
                 last_draw = 0.0
@@ -1328,7 +1384,8 @@ def main():
                                       hover_key=active_highlight,
                                       progress=progress_pct,
                                       typed_text=typed_text,
-                                      theme_idx=current_theme, draw=True)
+                                      theme_idx=current_theme, draw=True,
+                                      learn_status=face_learn_status)
                 elif input_mode not in ("ASSIST", "AIR", "FACE"):
                     # GRID draws its own solid console deck inside draw_keyboard
                     draw_keyboard(frame, highlight_key=active_highlight,
@@ -1360,7 +1417,7 @@ def main():
 
             if demo:
                 cv2.rectangle(frame, (0, h-26), (w, h), (0, 0, 0), -1)
-                cv2.putText(frame, "DEMO MODE — synthetic hand (no webcam)  |  " + demo.status(),
+                cv2.putText(frame, "DEMO MODE - synthetic hand (no webcam)  |  " + demo.status(),
                             (10, h-8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (60, 200, 255), 1, cv2.LINE_AA)
 
             cv2.imshow("Emergency AI Communication Interface", frame)

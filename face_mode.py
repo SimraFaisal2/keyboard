@@ -82,10 +82,20 @@ class FaceID:
 
     # ------------------------------------------------------------- runtime
     def detect(self, frame):
-        """Return a list of (x, y, w, h) face boxes in the frame."""
+        """Return a list of (x, y, w, h) face boxes in the frame.
+
+        Tiered cascade settings: webcam lighting varies a lot, and the
+        strict defaults (1.15/5/60) silently miss faces in dim rooms.
+        Try strict first, then progressively more sensitive settings,
+        and return the first tier that finds anything.
+        """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        return self.cascade.detectMultiScale(
-            gray, scaleFactor=1.15, minNeighbors=5, minSize=(60, 60))
+        for sf, mn, ms in ((1.15, 5, 60), (1.08, 4, 50), (1.05, 3, 45), (1.03, 2, 40)):
+            boxes = self.cascade.detectMultiScale(
+                gray, scaleFactor=sf, minNeighbors=mn, minSize=(ms, ms))
+            if len(boxes):
+                return boxes
+        return []
 
     def identify(self, face_img) -> tuple[str | None, float]:
         """Return (name, confidence) or (None, confidence) for a face crop."""
