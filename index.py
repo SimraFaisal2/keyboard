@@ -30,6 +30,13 @@ import collections
 import pkg_resources
 from symspellpy import SymSpell, Verbosity
 import pytesseract
+
+try:
+    pytesseract.get_tesseract_version()
+    TESSERACT_OK = True
+except Exception:
+    TESSERACT_OK = False
+    print("⚠️  Tesseract OCR binary not found — AIR mode can draw, but auto-read needs it installed.")
 import winsound
 import pyttsx3
 
@@ -795,6 +802,8 @@ def main():
     input_mode    = "MAIN_MENU"
     px, py        = 0, 0
     last_draw     = 0.0
+    air_notice    = ""
+    air_notice_until = 0.0
     x_prev        = None
     y_prev        = None
     current_theme = 0
@@ -937,13 +946,17 @@ def main():
 
                     # â”€â”€ AIR mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     elif input_mode == "AIR":
-                        tx,ty = lm[4][0],lm[4][1]
-                        if math.hypot(cx-tx,cy-ty)<40:
-                            if px==0 and py==0: px,py=cx,cy
-                            cv2.line(drawing_canvas,(px,py),(cx,cy),(255,255,255),16)
-                            px,py=cx,cy; last_draw=time.time()
+                        # Compare RAW thumb vs RAW index for the pinch: the filtered
+                        # index tip lags during motion, which used to break strokes
+                        # mid-draw once the lag pushed the distance over the threshold.
+                        tx, ty = lm[4][0], lm[4][1]
+                        ix, iy = lm[8][0], lm[8][1]
+                        if math.hypot(ix - tx, iy - ty) < 45:
+                            if px == 0 and py == 0: px, py = cx, cy
+                            cv2.line(drawing_canvas, (px, py), (cx, cy), (255, 255, 255), 16)
+                            px, py = cx, cy; last_draw = time.time()
                         else:
-                            px,py=0,0
+                            px, py = 0, 0
 
                     # â”€â”€ ASL mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     elif input_mode == "ASL":
@@ -1096,20 +1109,28 @@ def main():
             # AIR mode: auto-read the canvas after 1.5s of no drawing — runs
             # whether or not the hand is still visible (lift hand to submit).
             if input_mode == "AIR" and last_draw > 0 and (time.time() - last_draw) > 1.5:
-                try:
-                    gray = cv2.cvtColor(drawing_canvas, cv2.COLOR_BGR2GRAY)
-                    gray = cv2.bitwise_not(gray)
-                    gray = cv2.dilate(gray, np.ones((5, 5), np.uint8), iterations=2)
-                    gray = cv2.copyMakeBorder(gray, 100, 100, 100, 100,
-                                              cv2.BORDER_CONSTANT, value=[255, 255, 255])
-                    det = pytesseract.image_to_string(
-                        gray, config='--psm 10 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-                    ).strip()
-                    if det:
-                        typed_text += det
-                        pyautogui.typewrite(det)
-                except Exception:
-                    pass
+                if not TESSERACT_OK:
+                    air_notice = "OCR unavailable — install tesseract to auto-read"
+                    air_notice_until = time.time() + 3.0
+                else:
+                    try:
+                        gray = cv2.cvtColor(drawing_canvas, cv2.COLOR_BGR2GRAY)
+                        gray = cv2.bitwise_not(gray)
+                        gray = cv2.dilate(gray, np.ones((5, 5), np.uint8), iterations=2)
+                        gray = cv2.copyMakeBorder(gray, 100, 100, 100, 100,
+                                                  cv2.BORDER_CONSTANT, value=[255, 255, 255])
+                        det = pytesseract.image_to_string(
+                            gray, config='--psm 10 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+                        ).strip()
+                        if det:
+                            typed_text += det
+                            pyautogui.typewrite(det)
+                            air_notice = f"✓ read: {det}"
+                        else:
+                            air_notice = "couldn't read that — draw one clear letter"
+                    except Exception:
+                        air_notice = "OCR failed — try again"
+                    air_notice_until = time.time() + 2.5
                 drawing_canvas = np.zeros_like(frame)
                 last_draw = 0.0
 
@@ -1139,6 +1160,9 @@ def main():
             if input_mode == "AIR":
                 frame = cv2.addWeighted(frame, 0.3, np.zeros_like(frame), 0.7, 0)
                 frame = cv2.addWeighted(frame, 1, drawing_canvas, 1.0, 0)
+                if air_notice and time.time() < air_notice_until:
+                    cv2.putText(frame, air_notice, (60, 262),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (120, 235, 170), 2, cv2.LINE_AA)
             elif input_mode == "ASSIST":
                 ui_overlay = frame.copy()
                 frame[:] = (20, 25, 30)
