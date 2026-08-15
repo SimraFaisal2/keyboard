@@ -82,22 +82,30 @@ sym_spell.load_dictionary(
     term_index=0, count_index=1
 )
 
+_pred_prefix, _pred_results = None, []
+
 def get_predictions(text):
+    """Return the 3 most likely word completions for the current word.
+
+    Uses frequency-ordered prefix completion over the loaded dictionary.
+    (SymSpell.lookup is a typo-correction engine: for a partial word like
+    "hel" it returns corrections such as "heal" that don't start with the
+    typed prefix, so a startswith filter silently empties the prediction
+    bar. Scanning the dictionary for real prefixes is both correct and,
+    cached per prefix, effectively free since the text only changes on keypress.)
+    """
+    global _pred_prefix, _pred_results
     words = text.split(" ")
     last = words[-1].lower() if words else ""
-    if not last: return []
-    out, matches = [], sym_spell.lookup(last, Verbosity.CLOSEST,
-                                         transfer_casing=True, max_edit_distance=1)
-    for m in matches:
-        if m.term.lower().startswith(last) and m.term.lower() != last:
-            out.append(m.term)
-        if len(out) >= 3: break
-    if len(out) < 3:
-        for m in matches:
-            if m.term not in out and m.term.lower() != last:
-                out.append(m.term)
-            if len(out) >= 3: break
-    return out
+    if not last:
+        return []
+    if last == _pred_prefix:
+        return _pred_results
+    candidates = [(count, term) for term, count in sym_spell.words.items()
+                  if term.startswith(last) and term != last]
+    candidates.sort(key=lambda t: -t[0])
+    _pred_prefix, _pred_results = last, [term for _, term in candidates[:3]]
+    return _pred_results
 
 # â”€â”€â”€ Drawing utils â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def draw_rounded_rect(img, pt1, pt2, color, thickness=-1, radius=10):
