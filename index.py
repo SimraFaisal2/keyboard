@@ -35,8 +35,21 @@ try:
     pytesseract.get_tesseract_version()
     TESSERACT_OK = True
 except Exception:
+    # PATH may be stale right after install — fall back to the standard
+    # Windows install location before giving up.
     TESSERACT_OK = False
-    print("⚠️  Tesseract OCR binary not found — AIR mode can draw, but auto-read needs it installed.")
+    for _p in (r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+               r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"):
+        if os.path.exists(_p):
+            pytesseract.pytesseract.tesseract_cmd = _p
+            try:
+                pytesseract.get_tesseract_version()
+                TESSERACT_OK = True
+            except Exception:
+                pass
+            break
+    if not TESSERACT_OK:
+        print("⚠️  Tesseract OCR binary not found — AIR mode can draw, but auto-read needs it installed.")
 import winsound
 import pyttsx3
 
@@ -307,9 +320,9 @@ def draw_main_menu(frame, hover_key, progress, draw=True):
     DIM    = (150, 165, 185)
 
     if draw:
-        # Dark semi-transparent overlay so the user can see their hand/camera feed
-        overlay = frame.copy()
-        cv2.addWeighted(overlay, 0.25, np.zeros_like(frame), 0.75, 0, frame)
+        # Solid dark background — the main menu shows ONLY the menu, no camera
+        # feed behind it. (The fingertip is re-drawn on top by the main loop.)
+        frame[:] = (12, 14, 20)
 
         # ── Header ─────────────────────────────────────────────────
         cv2.putText(frame, "HI, I'M", (80, 140),
@@ -809,6 +822,8 @@ def main():
     current_theme = 0
     trail         = []
     last_vol_y    = None
+    last_hand     = None   # last detected hand, for re-drawing over solid UIs
+    last_cur      = (0, 0)
     escape_start  = 0.0
 
     # ASL state
@@ -1092,7 +1107,10 @@ def main():
                         current_hover=None
 
                     mp_draw.draw_landmarks(frame,handLms,mp_hands.HAND_CONNECTIONS)
+                    last_hand = handLms
+                    last_cur  = (cx, cy)
             else:
+                last_hand = None
                 trail.clear()
                 if input_mode=="ASSIST" and time.time()<assist_alert_until:
                     draw_assist_overlay(frame,assist_gesture,assist_conf,
@@ -1138,6 +1156,12 @@ def main():
 
             if input_mode == "MAIN_MENU":
                 draw_main_menu(frame, hover_key=active_highlight, progress=progress_pct, draw=True)
+                if last_hand is not None:
+                    # the solid menu covers the hand — re-draw the fingertip so
+                    # the user can still see where they are aiming
+                    mp_draw.draw_landmarks(frame, last_hand, mp_hands.HAND_CONNECTIONS)
+                    cv2.circle(frame, last_cur, 6, (255, 255, 255), cv2.FILLED)
+                    cv2.circle(frame, last_cur, 14, THEMES[current_theme]["hover"], 2, cv2.LINE_AA)
             else:
                 draw_top_nav(frame, hover_key=active_highlight, progress=progress_pct, mode=input_mode, draw=True)
                 if input_mode == "MEMO" and memo_session:
