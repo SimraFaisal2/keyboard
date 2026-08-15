@@ -607,7 +607,18 @@ def draw_keyboard(frame, highlight_key=None, progress=0.0,
                         cv2.FONT_HERSHEY_SIMPLEX, 0.72, (238, 236, 250), 2, cv2.LINE_AA)
         button_list.append(["THEME", 1080, 140, 170, 55, tc, "THEME"])
 
-    # Prediction row
+    # ─── GRID: prediction row + key grid on a floating console deck ───
+    if draw:
+        # Solid rounded console over the camera feed (video shows around the
+        # edges) — replaces the old flat full-width band
+        draw_rounded_rect(frame, (45, 130), (925, 590), T["panel"], -1, 18)
+        draw_rounded_rect(frame, (45, 130), (925, 590), T["border"], 1, 18)
+        # header + divider inside the deck
+        cv2.putText(frame, "GRID KEYBOARD", (68, 143),
+                    cv2.FONT_HERSHEY_DUPLEX, 0.6, T["accent"], 2, cv2.LINE_AA)
+        cv2.line(frame, (68, 152), (910, 152), T["border"], 1)
+
+    # Prediction row (word suggestions)
     for idx in range(3):
         pw = predictions[idx] if idx < len(predictions) else "..."
         px = 60 + idx * 260; kid = f"PRED_{idx}"
@@ -615,6 +626,8 @@ def draw_keyboard(frame, highlight_key=None, progress=0.0,
                  and highlight_key[0] == kid else T["key_bg"])
         hovered = highlight_key and highlight_key[0] == kid and color == T["hover"]
         if draw:
+            if hovered:
+                _glass(frame, px - 4, 156, px + 244, 214, T["accent"], alpha=0.30, radius=10)
             draw_rounded_rect(frame, (px, 160), (px + 240, 210),
                               T["hover"] if hovered else T["key_bg"], -1, 8)
             draw_rounded_rect(frame, (px, 160), (px + 240, 210),
@@ -642,8 +655,16 @@ def draw_keyboard(frame, highlight_key=None, progress=0.0,
             active = (highlight_key and highlight_key[0] == key
                       and highlight_key[1] == x and highlight_key[2] == y)
             if draw:
+                hovered = active and color == T["hover"]
+                if hovered:
+                    # soft outer glow so the target key pops off the deck
+                    _glass(frame, x - 5, y - 5, x + w + 5, y + h + 5,
+                           T["hover"], alpha=0.28, radius=12)
                 draw_rounded_rect(frame, (x, y), (x + w, y + h), color, -1, 8)
-                # subtle bottom edge for depth
+                # top highlight + bottom shadow for a keycap feel
+                cv2.line(frame, (x + 8, y + 2), (x + w - 8, y + 2),
+                         (min(255, color[0] + 28), min(255, color[1] + 28),
+                          min(255, color[2] + 36)), 1)
                 draw_rounded_rect(frame, (x + 2, y + h - 6), (x + w - 2, y + h - 2),
                                   (14, 18, 28) if color == T["key_bg"] else (10, 18, 26), -1, 4)
                 draw_rounded_rect(frame, (x, y), (x + w, y + h),
@@ -654,9 +675,10 @@ def draw_keyboard(frame, highlight_key=None, progress=0.0,
                 txt_col = (8, 14, 24) if color != T["key_bg"] else T["text"]
                 cv2.putText(frame, disp, (x + (w - sz[0]) // 2, y + (h + sz[1]) // 2 - 2),
                             cv2.FONT_HERSHEY_SIMPLEX, fnt_sz, txt_col, 2, cv2.LINE_AA)
-                if active and color == T["hover"]:
-                    bw = int(w * progress)
-                    cv2.rectangle(frame, (x + 6, y + h - 6), (x + 6 + bw, y + h - 2), T["press"], -1)
+                if hovered:
+                    bw = int((w - 12) * progress)
+                    cv2.rectangle(frame, (x + 6, y + h - 8), (x + 6 + bw, y + h - 4),
+                                  T["press"], -1)
             button_list.append([key, x, y, w, h, color, key])
     return button_list
 
@@ -1308,10 +1330,7 @@ def main():
                                       typed_text=typed_text,
                                       theme_idx=current_theme, draw=True)
                 elif input_mode not in ("ASSIST", "AIR", "FACE"):
-                    if input_mode == "GRID":
-                        fh2, fw2 = frame.shape[:2]
-                        cv2.rectangle(frame, (0, fh2 // 2 - 50), (fw2, fh2),
-                                      THEMES[current_theme]["bg"], -1)
+                    # GRID draws its own solid console deck inside draw_keyboard
                     draw_keyboard(frame, highlight_key=active_highlight,
                                   progress=progress_pct, predictions=predictions,
                                   mode=input_mode, theme_idx=current_theme, draw=True)
