@@ -52,6 +52,7 @@ except Exception:
         print("⚠️  Tesseract OCR binary not found — AIR mode can draw, but auto-read needs it installed.")
 import winsound
 import pyttsx3
+import threading
 
 # â”€â”€â”€ Suppress TensorFlow warnings during MediaPipe import â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -69,6 +70,13 @@ except ImportError as e:
     print(f"â„¹ï¸  MEMO mode unavailable: {e}")
 
 # â”€â”€â”€ MediaPipe â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+try:
+    from face_mode import FaceID
+    FACE_AVAILABLE = True
+except ImportError as e:
+    FACE_AVAILABLE = False
+    print(f"FACE mode unavailable: {e}")
+
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(max_num_hands=2,
                        min_detection_confidence=0.5,
@@ -345,15 +353,17 @@ def draw_main_menu(frame, hover_key, progress, draw=True):
         ("GRID",   "ON-SCREEN|KEYBOARD",  VIOLET, True),
         ("ASL",    "ASL|TRANSLATOR",      (255, 255, 255), False),
         ("AIR",    "AIR|HAND-WRITING",    (255, 255, 255), False),
+        ("FACE",   "FACE|BIOMETRIC ID",   (255, 255, 255), False),
         ("ASSIST", "COGNITIVE|ASSISTANCE",(255, 255, 255), False),
     ]
     if MEMO_AVAILABLE:
         modes.append(("MEMO", "OBJECT|MEMORY", (255, 255, 255), False))
 
-    bw = 210 if len(modes) >= 5 else 230
-    gap = 20 if len(modes) >= 5 else 30
-    bh = 90
-    total = len(modes) * bw + (len(modes) - 1) * gap
+    n = len(modes)
+    gap = 18 if n >= 6 else 24
+    bw  = (fw - 160 - (n - 1) * gap) // n
+    bh  = 90
+    total = n * bw + (n - 1) * gap
     sx    = (fw - total) // 2
     sy    = 520
 
@@ -436,6 +446,58 @@ def draw_top_nav(frame, hover_key, progress, mode, draw=True):
     return button_list
 
 
+def draw_face_overlay(frame, overlay, hover_key=None, progress=0.0,
+                      typed_text="", theme_idx=0, draw=True):
+    """FACE mode: green tag on recognised people, amber on strangers, plus a
+    LEARN button (enrolls the largest face under the name in the text box).
+    ``overlay`` is a list of (x, y, w, h, name, confidence) tuples."""
+    import cv2
+    T = THEMES[theme_idx]
+    buttons = []
+    h, w = frame.shape[:2]
+
+    if draw:
+        for (fx, fy, fw, fh, name, conf) in overlay:
+            col = (60, 220, 130) if name else (225, 185, 70)
+            cv2.rectangle(frame, (fx, fy), (fx + fw, fy + fh), col, 2, cv2.LINE_AA)
+            label = f"{name} · {conf:.0f}" if name else "unknown"
+            sz = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
+            cv2.rectangle(frame, (fx, fy - 30), (fx + fw, fy), col, -1)
+            cv2.putText(frame, label, (fx + 8, fy - 9),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (10, 14, 18), 2, cv2.LINE_AA)
+            if not name:
+                tip = "LEARN to save this face"
+                tsz = cv2.getTextSize(tip, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)[0]
+                cv2.putText(frame, tip, (fx + 8, fy + fh + 22),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (225, 185, 70), 1, cv2.LINE_AA)
+
+    # LEARN button — top right, mirrors the ASL SPEAK button
+    name = (typed_text or "Person").strip().split()
+    name = name[0] if name else "Person"
+    bx, by, bw, bh = w - 260, 20, 240, 54
+    hovered = hover_key and hover_key[0] == "LEARN_FACE"
+    if draw:
+        if hovered:
+            _glass(frame, bx, by, bx + bw, by + bh, (60, 220, 130), alpha=0.55, radius=12)
+        else:
+            draw_rounded_rect(frame, (bx, by), (bx + bw, by + bh), (14, 40, 28), -1, 12)
+        draw_rounded_rect(frame, (bx, by), (bx + bw, by + bh), (60, 220, 130), 1, 12)
+        label = f"LEARN: {name}"
+        sz = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.62, 2)[0]
+        cv2.putText(frame, label, (bx + (bw - sz[0]) // 2, by + 35),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.62, (235, 245, 240), 2, cv2.LINE_AA)
+        if hovered:
+            pw = int(bw * progress)
+            cv2.rectangle(frame, (bx + 4, by + bh - 7), (bx + 4 + pw, by + bh - 3),
+                          (56, 189, 248), -1)
+        if not overlay:
+            sz = cv2.getTextSize("No face in view", cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)[0]
+            cv2.putText(frame, "No face in view", (bx + (bw - sz[0]) // 2, by + 76),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (140, 150, 165), 1, cv2.LINE_AA)
+    buttons.append(["LEARN_FACE", bx, by, bw, bh, (60, 220, 130), "LEARN"])
+    return buttons
+
+
 def check_escape_gesture(results, frame_w, frame_h):
     """Return True if both hands are open palms (escape gesture)."""
     if not results.multi_hand_landmarks or len(results.multi_hand_landmarks) < 2:
@@ -474,7 +536,7 @@ def draw_keyboard(frame, highlight_key=None, progress=0.0,
             cv2.rectangle(frame, (1084, 57), (1084 + pw, 61), (240, 240, 250), -1)
     button_list.append(["TOGGLE_MODE", 1080, 10, 170, 55, mode_color, "TOGGLE_MODE"])
 
-    if mode in ("ASSIST", "MEMO"):
+    if mode in ("ASSIST", "MEMO", "FACE"):
         return button_list
     elif mode == "ASL":
         if draw:
@@ -811,7 +873,7 @@ def main():
     vis_key         = None
     vis_time        = 0.0
 
-    MODES         = ["GRID","AIR","ASL","ASSIST","MEMO","MAIN_MENU"]
+    MODES         = ["GRID","AIR","ASL","FACE","ASSIST","MEMO","MAIN_MENU"]
     input_mode    = "MAIN_MENU"
     px, py        = 0, 0
     last_draw     = 0.0
@@ -850,6 +912,15 @@ def main():
         except Exception as e:
             print(f"⚠️  MEMO init failed: {e}")
 
+    # Biometric face identification (LBPH — see face_mode.py)
+    face_id = FaceID() if FACE_AVAILABLE else None
+    if face_id is not None:
+        n = face_id.trained_count()
+        print(f"✅ FACE mode ready — {n} known person(s)" if n else
+              "ℹ️  FACE mode ready — no known_faces/ photos yet; drop <name>.jpg to enable ID")
+    face_overlay      = []      # (x, y, w, h, name, conf) from the last detection
+    face_announce_until = 0.0   # cooldown so we don't say hello every frame
+
     # Per-frame UI state — initialised here so frame-1 never raises UnboundLocalError
     active_highlight = None
     progress_pct     = 0.0
@@ -869,6 +940,15 @@ def main():
             h, w, _ = frame.shape
             predictions = get_predictions(typed_text)
 
+            # FACE mode: detect + identify faces every frame (independent of the
+            # hand) so tags stay live even when the user isn't gesturing.
+            if input_mode == "FACE" and face_id is not None:
+                face_overlay = []
+                for (fx, fy, fw, fh) in face_id.detect(frame):
+                    crop = frame[fy:fy + fh, fx:fx + fw]
+                    name, conf = face_id.identify(crop)
+                    face_overlay.append((fx, fy, fw, fh, name, conf))
+
             # Compute the clickable layout first so the demo pilot can aim at buttons.
             if input_mode == "MAIN_MENU":
                 button_list = draw_main_menu(frame, active_highlight, progress_pct, draw=False)
@@ -876,7 +956,7 @@ def main():
                 button_list = draw_top_nav(frame, active_highlight, progress_pct, input_mode, draw=False)
                 # MEMO buttons are collected in the hand / no-hand branches below
                 # so the state machine runs exactly once per frame with real hand data.
-                if input_mode not in ("ASSIST", "AIR", "MEMO"):
+                if input_mode not in ("ASSIST", "AIR", "MEMO", "FACE"):
                     button_list += draw_keyboard(frame, predictions=predictions,
                                                  mode=input_mode,
                                                  theme_idx=current_theme,
@@ -1004,6 +1084,26 @@ def main():
                         else:
                             cv2.putText(frame, "MEMO init failed", (50, 350), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
+                    # ─── FACE mode ──────────────────────────────────────────
+                    elif input_mode == "FACE":
+                        if face_id is not None:
+                            # Say hello once when a known person appears (cooldown)
+                            now = time.time()
+                            if face_overlay and now > face_announce_until:
+                                seen = sorted({n for (_, _, _, _, n, _) in face_overlay if n})
+                                if seen:
+                                    try:
+                                        tts.say("Hello, " + seen[0])
+                                        tts.runAndWait()
+                                    except Exception:
+                                        pass
+                                    face_announce_until = now + 5.0
+                            # LEARN button joins the hover list (drawn later with
+                            # resolved hover state so it still paints over the feed)
+                            button_list += draw_face_overlay(
+                                frame, face_overlay, hover_key=None, progress=0.0,
+                                typed_text=typed_text, theme_idx=current_theme, draw=False)
+
                     # GRID mode gestures
                     elif input_mode=="GRID":
                         # Pinch detection (thumb + index finger) â†’ ASL mode entry
@@ -1072,6 +1172,11 @@ def main():
                             elif kid=="MAIN_MENU":
                                 input_mode = "MAIN_MENU"
                                 escape_start = 0.0
+                            elif kid == "FACE":
+                                # keep typed_text: it's the name LEARN will enroll
+                                input_mode = "FACE"
+                                drawing_canvas = np.zeros_like(frame)
+                                asl_stable = ""; trail.clear()
                             elif kid in ("GRID", "ASL", "AIR", "ASSIST", "MEMO"):
                                 input_mode = kid
                                 drawing_canvas = np.zeros_like(frame)
@@ -1094,6 +1199,26 @@ def main():
                                     for _ in range(len(ws[-1])): pyautogui.press('backspace')
                                     ws[-1]=word; typed_text=" ".join(ws)+" "
                                     pyautogui.typewrite(word+" ")
+                            elif kid == "LEARN_FACE":
+                                if face_id is not None and face_overlay:
+                                    # enroll the largest face under the typed name
+                                    (fx, fy, fw, fh) = max(
+                                        face_overlay, key=lambda b: b[2] * b[3])[:4]
+                                    nm = (typed_text or "Person").strip().split()
+                                    nm = nm[0] if nm else "Person"
+                                    try:
+                                        os.makedirs("known_faces", exist_ok=True)
+                                        crop = frame[fy:fy + fh, fx:fx + fw]
+                                        cv2.imwrite(os.path.join("known_faces", f"{nm}.jpg"), crop)
+                                        n = face_id.reload()
+                                        try:
+                                            tts.say(f"Learned {nm}. I now know {n} people.")
+                                            tts.runAndWait()
+                                        except Exception:
+                                            pass
+                                        print(f"✅ Learned face as {nm}.jpg — now {n} known")
+                                    except Exception as e:
+                                        print(f"⚠️  LEARN failed: {e}")
                             elif kid.startswith("MEMO_"):
                                 if memo_session:
                                     typed_text = memo_session.handle_button(kid, typed_text)
@@ -1172,7 +1297,14 @@ def main():
                         hover_key=active_highlight, progress=progress_pct,
                         draw=True, run_state=False
                     )
-                elif input_mode not in ("ASSIST", "AIR"):
+                elif input_mode == "FACE" and face_id is not None:
+                    # paint tags + LEARN with the resolved hover state
+                    draw_face_overlay(frame, face_overlay,
+                                      hover_key=active_highlight,
+                                      progress=progress_pct,
+                                      typed_text=typed_text,
+                                      theme_idx=current_theme, draw=True)
+                elif input_mode not in ("ASSIST", "AIR", "FACE"):
                     if input_mode == "GRID":
                         fh2, fw2 = frame.shape[:2]
                         cv2.rectangle(frame, (0, fh2 // 2 - 50), (fw2, fh2),

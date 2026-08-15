@@ -80,8 +80,17 @@ of a webcam (MediaPipe hand tracking).
 | `GRID`   | Hover-to-click virtual keyboard with live word prediction (type by hovering each key) |
 | `AIR`    | Pinch thumb + index together and write in the air; pause 1.5 s to auto-read the character (OCR) |
 | `ASL`    | Hold a single-letter hand sign steady to type (A B C D E F I K L O R U V W X Y) |
+| `FACE`   | Biometric face identification (OpenCV LBPH) — recognise people live, greet them by voice, and teach new faces on the spot |
 | `ASSIST` | Emergency gestures (HELP / EMERGENCY / PAIN / WATER / FOOD / TOILET / YES / NO) — needs `train_model.py` to build the model first |
 | `MEMO`   | Personal object memory — teach an object, say its name, recall it later |
+
+**FACE mode (biometric ID):** drop one photo per person into `known_faces/` —
+either `known_faces/<Name>.jpg` (single photo) or `known_faces/<Name>/` (a folder
+of photos) — and FACE mode will identify them live from the camera, draw a
+name tag with match confidence, and say “Hello, <name>” once. To teach a new
+person without files: type their name in GRID, open FACE mode, and hover
+**LEARN: <name>** while their face is in view — the app saves the photo and
+retrains instantly (LBPH, no extra dependencies).
 
 ### Run it
 

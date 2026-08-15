@@ -8,7 +8,12 @@ venv/
 # Runtime artifacts (local app state, logs)
 mate.log
 *.log
+*.err
+_face_run.*
 /tmp/
+
+# Biometric data enrolled via FACE mode (personal, never commit)
+known_faces/
 
 # IDE / editor
 .idea/
