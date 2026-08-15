@@ -13,3 +13,4 @@ mate.log
 # IDE / editor
 .idea/
 .vscode/
+data/memory/
