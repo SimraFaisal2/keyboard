@@ -101,3 +101,7 @@ Controls: hover a key for ~0.45 s to click it; pinch thumb + index for 1.5 s in
 GRID mode to switch to ASL; show two open palms to escape to the main menu;
 press `q` to quit. Note: keys are pressed into whatever window has focus
 (`pyautogui`), so point it at a text editor to see the output.
+
+> **Demo tip:** `--demo` keeps keystrokes on-screen only — it won't type into
+> your other apps. Pass `--real-keys` to also send real keystrokes. The window
+> opens resized to fit small screens (drag to resize; content is 1280×720).

@@ -72,7 +72,9 @@ index.DemoPilot.status = fake_status
 
 # ---- run the real main() ---------------------------------------------------
 import sys as _sys
-_sys.argv = ["index.py", "--demo"]     # main() argparse: run the demo pilot
+_sys.argv = ["index.py", "--demo", "--real-keys"]   # real keys so the recorder sees presses
+index.cv2.namedWindow = lambda *a, **k: None
+index.cv2.resizeWindow = lambda *a, **k: None
 
 try:
     index.main()

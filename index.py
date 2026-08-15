@@ -696,6 +696,8 @@ def main():
                         help="run with a synthetic hand — no webcam needed (self-driving tour)")
     parser.add_argument("--camera", type=int, default=0,
                         help="webcam index (default: 0)")
+    parser.add_argument("--real-keys", action="store_true",
+                        help="in --demo mode, also send real keystrokes (default: demo only shows them on-screen)")
     args = parser.parse_args()
 
     demo = DemoPilot() if args.demo else None
@@ -703,6 +705,19 @@ def main():
     if cap is not None:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+    # Demo mode must not hijack the user's keyboard: show keystrokes on-screen
+    # only, unless --real-keys is given.
+    if demo and not args.real_keys:
+        class _SilentKeys:
+            def press(self, *a, **k): pass
+            def typewrite(self, *a, **k): pass
+        global pyautogui
+        pyautogui = _SilentKeys()
+
+    # Resizable window scaled to fit small laptop screens (content is 1280x720).
+    cv2.namedWindow("Emergency AI Communication Interface", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Emergency AI Communication Interface", 960, 540)
 
     tts = pyttsx3.init()
     tts.setProperty('rate', 150)
@@ -1091,7 +1106,8 @@ def main():
                             (10, h-8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (60, 200, 255), 1, cv2.LINE_AA)
 
             cv2.imshow("Emergency AI Communication Interface", frame)
-            if cv2.waitKey(1)&0xFF==ord('q'): break
+            # 30 fps pacing in demo mode so the synthetic hand glides instead of teleporting
+            if cv2.waitKey(33 if demo else 1)&0xFF==ord('q'): break
     finally:
         if cap is not None:
             cap.release()
