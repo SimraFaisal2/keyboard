@@ -124,10 +124,26 @@ def draw_rounded_rect(img, pt1, pt2, color, thickness=-1, radius=10):
         cv2.rectangle(img,(x1,y1+radius),(x2,y2-radius),color,thickness)
 
 # â”€â”€â”€ Themes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+def _glass(frame, x1, y1, x2, y2, color, alpha=0.55, radius=10):
+    """Translucent rounded-rect fill blended over the current frame."""
+    ov = frame.copy()
+    draw_rounded_rect(ov, (x1, y1), (x2, y2), color, -1, radius)
+    cv2.addWeighted(ov, alpha, frame, 1.0 - alpha, 0, frame)
+
+
 THEMES = [
-    {"bg":(15,12,10),  "border":(60,55,52),  "key_bg":(36,30,28), "key_border":(75,70,68),   "hover":(240,120,10), "press":(40,220,100), "text":(255,255,255)},
-    {"bg":(20,0,30),   "border":(100,0,150), "key_bg":(40,0,60),  "key_border":(150,0,200),  "hover":(0,255,255),  "press":(255,0,255),  "text":(200,255,255)},
-    {"bg":(5,5,5),     "border":(40,40,40),  "key_bg":(20,20,20), "key_border":(60,60,60),   "hover":(200,200,200),"press":(255,255,255),"text":(180,180,180)}
+    # slate/navy + cyan hover + violet accent (default)
+    {"bg": (10, 12, 18),      "border": (40, 48, 66),   "key_bg": (22, 28, 42), "key_border": (52, 64, 90),
+     "hover": (56, 189, 248), "press": (52, 211, 153),  "text": (229, 234, 242), "accent": (167, 139, 250),
+     "panel": (15, 19, 30),   "text_dim": (150, 165, 185)},
+    # deep violet + teal hover
+    {"bg": (13, 9, 26),       "border": (72, 42, 126),  "key_bg": (28, 18, 54), "key_border": (104, 62, 168),
+     "hover": (0, 255, 235),  "press": (196, 92, 255),  "text": (231, 226, 255), "accent": (196, 122, 255),
+     "panel": (17, 12, 34),   "text_dim": (172, 152, 214)},
+    # monochrome light-on-dark
+    {"bg": (9, 9, 12),        "border": (46, 46, 54),   "key_bg": (19, 19, 24), "key_border": (62, 62, 74),
+     "hover": (222, 222, 232),"press": (255, 255, 255),"text": (202, 202, 212), "accent": (182, 182, 202),
+     "panel": (13, 13, 17),   "text_dim": (132, 132, 148)},
 ]
 
 # â”€â”€â”€ ASL heuristic helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -278,45 +294,46 @@ def draw_main_menu(frame, hover_key, progress, draw=True):
     import cv2, numpy as np
     button_list = []
     fh, fw = frame.shape[:2]
+    VIOLET = (167, 139, 250)
+    CYAN   = (56, 189, 248)
+    WHITE  = (235, 238, 245)
+    DIM    = (150, 165, 185)
 
     if draw:
         # Dark semi-transparent overlay so the user can see their hand/camera feed
         overlay = frame.copy()
-        cv2.addWeighted(overlay, 0.3, np.zeros_like(frame), 0.7, 0, frame)
+        cv2.addWeighted(overlay, 0.25, np.zeros_like(frame), 0.75, 0, frame)
 
-        # ── Header text ─────────────────────────────────────────────
-        # "HI, I'M" — bold white, filled
-        cv2.putText(frame, "HI, I'M", (80, 160),
-                    cv2.FONT_HERSHEY_DUPLEX, 3.5, (255,255,255), 12, cv2.LINE_AA)
-        # "SIMRA FAISAL" — outline / stroke style (draw twice: thick dark then thin white)
-        cv2.putText(frame, "SIMRA FAISAL", (80, 280),
-                    cv2.FONT_HERSHEY_DUPLEX, 4.0, (255,255,255), 16, cv2.LINE_AA)
-        cv2.putText(frame, "SIMRA FAISAL", (80, 280),
-                    cv2.FONT_HERSHEY_DUPLEX, 4.0, (0,0,0), 2, cv2.LINE_AA)
+        # ── Header ─────────────────────────────────────────────────
+        cv2.putText(frame, "HI, I'M", (80, 140),
+                    cv2.FONT_HERSHEY_DUPLEX, 1.8, DIM, 2, cv2.LINE_AA)
+        # "SIMRA FAISAL" — thick white with a thin dark outline
+        cv2.putText(frame, "SIMRA FAISAL", (80, 250),
+                    cv2.FONT_HERSHEY_DUPLEX, 3.4, WHITE, 10, cv2.LINE_AA)
+        cv2.putText(frame, "SIMRA FAISAL", (80, 250),
+                    cv2.FONT_HERSHEY_DUPLEX, 3.4, (10, 12, 18), 2, cv2.LINE_AA)
+        # violet accent underline
+        cv2.rectangle(frame, (84, 268), (460, 274), VIOLET, -1)
 
-        # Pink accent label  "AI COMMUNICATION SYSTEM"
-        PINK = (180, 80, 180)
-        cv2.putText(frame, "AI COMMUNICATION SYSTEM", (80, 360),
-                    cv2.FONT_HERSHEY_DUPLEX, 1.1, PINK, 3, cv2.LINE_AA)
-
-        # Description
-        cv2.putText(frame, "Hover over a mode to get started.", (80, 430),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.95, (200,200,200), 2, cv2.LINE_AA)
+        cv2.putText(frame, "AI COMMUNICATION SYSTEM", (80, 330),
+                    cv2.FONT_HERSHEY_DUPLEX, 0.85, VIOLET, 2, cv2.LINE_AA)
+        cv2.putText(frame, "Hover over a mode to get started.", (80, 385),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, DIM, 1, cv2.LINE_AA)
 
     # ── Mode buttons (row layout) ────────────────────────────────
     modes = [
-        ("GRID",   "ON-SCREEN|KEYBOARD",  (180, 80, 180),  True ),
-        ("ASL",    "ASL|TRANSLATOR",      (255,255,255),   False),
-        ("AIR",    "AIR|HAND-WRITING",    (255,255,255),   False),
-        ("ASSIST", "COGNITIVE|ASSISTANCE",(255,255,255),   False),
+        ("GRID",   "ON-SCREEN|KEYBOARD",  VIOLET, True),
+        ("ASL",    "ASL|TRANSLATOR",      (255, 255, 255), False),
+        ("AIR",    "AIR|HAND-WRITING",    (255, 255, 255), False),
+        ("ASSIST", "COGNITIVE|ASSISTANCE",(255, 255, 255), False),
     ]
     if MEMO_AVAILABLE:
-        modes.append(("MEMO", "OBJECT|MEMORY", (255,255,255), False))
+        modes.append(("MEMO", "OBJECT|MEMORY", (255, 255, 255), False))
 
     bw = 210 if len(modes) >= 5 else 230
     gap = 20 if len(modes) >= 5 else 30
     bh = 90
-    total = len(modes) * bw + (len(modes)-1) * gap
+    total = len(modes) * bw + (len(modes) - 1) * gap
     sx    = (fw - total) // 2
     sy    = 520
 
@@ -324,37 +341,30 @@ def draw_main_menu(frame, hover_key, progress, draw=True):
         x = sx + i * (bw + gap)
         hovered = hover_key and hover_key[0] == mid
 
-        bg_col = col if filled else (0,0,0)
-        bd_col = col
-
         if draw:
-            # Fill rectangle
-            overlay = frame.copy()
-            cv2.rectangle(overlay, (x, sy), (x+bw, sy+bh), bg_col, -1)
-            cv2.addWeighted(overlay, 1.0, frame, 0.0, 0, frame)
-            cv2.rectangle(frame, (x, sy), (x+bw, sy+bh), bd_col, 2)
-
+            bg_col = (40, 34, 72) if filled else (16, 20, 32)
+            bd_col = VIOLET if filled else (58, 70, 96)
             if hovered:
-                # Highlight
-                ov2 = frame.copy()
-                cv2.rectangle(ov2, (x, sy), (x+bw, sy+bh), (255,255,255), -1)
-                cv2.addWeighted(ov2, 0.15, frame, 0.85, 0, frame)
-                # Progress bar at bottom
+                _glass(frame, x, sy, x + bw, sy + bh, VIOLET, alpha=0.28, radius=14)
+                bd_col = (200, 185, 255)
+            else:
+                draw_rounded_rect(frame, (x, sy), (x + bw, sy + bh), bg_col, -1, 14)
+            draw_rounded_rect(frame, (x, sy), (x + bw, sy + bh), bd_col, 1, 14)
+            if hovered:
                 pw = int(bw * progress)
-                cv2.rectangle(frame, (x, sy+bh-6), (x+pw, sy+bh), (180, 80, 180), -1)
+                cv2.rectangle(frame, (x + 4, sy + bh - 7), (x + 4 + pw, sy + bh - 3), CYAN, -1)
 
-            # Label (two lines)
+            # Label (two lines: mode name + subtitle)
             lines = label.split("|")
-            line_h = 30
-            total_h = len(lines) * line_h
-            ty = sy + (bh - total_h) // 2 + line_h - 4
-            txt_col = (0,0,0) if (filled and not hovered) else (255,255,255)
+            ty = sy + 26
             for li, ln in enumerate(lines):
-                tw, _ = cv2.getTextSize(ln, cv2.FONT_HERSHEY_DUPLEX, 0.62, 2)[0], None
-                sz = cv2.getTextSize(ln, cv2.FONT_HERSHEY_DUPLEX, 0.62, 2)
-                tx = x + (bw - sz[0][0]) // 2
-                cv2.putText(frame, ln, (tx, ty + li * line_h),
-                            cv2.FONT_HERSHEY_DUPLEX, 0.62, txt_col, 2, cv2.LINE_AA)
+                fnt = cv2.FONT_HERSHEY_DUPLEX if li == 0 else cv2.FONT_HERSHEY_SIMPLEX
+                sc  = 0.66 if li == 0 else 0.52
+                sz  = cv2.getTextSize(ln, fnt, sc, 2)
+                tx  = x + (bw - sz[0][0]) // 2
+                colr = WHITE if (hovered or li == 0) else DIM
+                cv2.putText(frame, ln, (tx, ty + li * 32), fnt, sc, colr,
+                            2 if li == 0 else 1, cv2.LINE_AA)
 
         button_list.append([mid, x, sy, bw, bh, col, label])
 
@@ -365,42 +375,43 @@ def draw_top_nav(frame, hover_key, progress, mode, draw=True):
     """Persistent back button + optional SPEAK button."""
     import cv2
     button_list = []
-    PINK = (180, 80, 180)
+    VIOLET = (167, 139, 250)
 
     # Back button
     x, y, w, h = 20, 20, 220, 54
     hovered = hover_key and hover_key[0] == "MAIN_MENU"
-    bg = PINK if hovered else (30, 30, 30)
-    
     if draw:
-        ov = frame.copy()
-        cv2.rectangle(ov, (x,y), (x+w,y+h), bg, -1)
-        cv2.addWeighted(ov, 1.0, frame, 0.0, 0, frame)
-        cv2.rectangle(frame, (x,y), (x+w,y+h), PINK, 2)
-        cv2.putText(frame, "< MAIN MENU", (x+14, y+35),
-                    cv2.FONT_HERSHEY_DUPLEX, 0.65, (255,255,255), 2, cv2.LINE_AA)
+        if hovered:
+            _glass(frame, x, y, x + w, y + h, VIOLET, alpha=0.55, radius=12)
+        else:
+            draw_rounded_rect(frame, (x, y), (x + w, y + h), (18, 23, 36), -1, 12)
+        draw_rounded_rect(frame, (x, y), (x + w, y + h), VIOLET, 1, 12)
+        cv2.putText(frame, "‹  MAIN MENU", (x + 18, y + 35),
+                    cv2.FONT_HERSHEY_DUPLEX, 0.62, (240, 240, 245), 2, cv2.LINE_AA)
         if hovered:
             pw = int(w * progress)
-            cv2.rectangle(frame, (x, y+h-5), (x+pw, y+h), (255,255,255), -1)
-            
-    button_list.append(["MAIN_MENU", x, y, w, h, PINK, "BACK"])
+            cv2.rectangle(frame, (x + 4, y + h - 7), (x + 4 + pw, y + h - 3),
+                          (56, 189, 248), -1)
+    button_list.append(["MAIN_MENU", x, y, w, h, VIOLET, "BACK"])
 
     # ASL speak button
     if mode == "ASL":
         sx, sy2, sw, sh = 1080, 75, 170, 55
         shov = hover_key and hover_key[0] == "SPEAK"
-        sbg = (40,140,40) if shov else (20,80,20)
         if draw:
-            ov2 = frame.copy()
-            cv2.rectangle(ov2, (sx,sy2), (sx+sw,sy2+sh), sbg, -1)
-            cv2.addWeighted(ov2, 1.0, frame, 0.0, 0, frame)
-            cv2.rectangle(frame, (sx,sy2), (sx+sw,sy2+sh), (40,200,40), 2)
-            cv2.putText(frame, "SPEAK", (sx+50, sy2+35),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2, cv2.LINE_AA)
+            if shov:
+                _glass(frame, sx, sy2, sx + sw, sy2 + sh, (46, 210, 120), alpha=0.55, radius=12)
+            else:
+                draw_rounded_rect(frame, (sx, sy2), (sx + sw, sy2 + sh), (14, 40, 28), -1, 12)
+            draw_rounded_rect(frame, (sx, sy2), (sx + sw, sy2 + sh), (60, 220, 130), 1, 12)
+            sz = cv2.getTextSize("SPEAK", cv2.FONT_HERSHEY_SIMPLEX, 0.72, 2)[0]
+            cv2.putText(frame, "SPEAK", (sx + (sw - sz[0]) // 2, sy2 + 35),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.72, (235, 245, 240), 2, cv2.LINE_AA)
             if shov:
                 pw = int(sw * progress)
-                cv2.rectangle(frame, (sx, sy2+sh-5), (sx+pw, sy2+sh), (255,255,255), -1)
-        button_list.append(["SPEAK", sx, sy2, sw, sh, (40,200,40), "SPEAK"])
+                cv2.rectangle(frame, (sx + 4, sy2 + sh - 7), (sx + 4 + pw, sy2 + sh - 3),
+                              (56, 189, 248), -1)
+        button_list.append(["SPEAK", sx, sy2, sw, sh, (60, 220, 130), "SPEAK"])
 
     return button_list
 
@@ -428,105 +439,143 @@ def draw_keyboard(frame, highlight_key=None, progress=0.0,
     T = THEMES[theme_idx]
 
     mode_color = (highlight_key[5] if highlight_key
-                  and highlight_key[0]=="TOGGLE_MODE" else (90,40,150))
+                  and highlight_key[0] == "TOGGLE_MODE" else T["accent"])
     if draw:
-        draw_rounded_rect(frame,(1080,10),(1250,65),mode_color,-1,8)
-        cv2.putText(frame,f"MODE: {mode}",(1090,45),cv2.FONT_HERSHEY_SIMPLEX,
-                    0.6,(255,255,255),2,cv2.LINE_AA)
-    button_list.append(["TOGGLE_MODE",1080,10,170,55,mode_color,"TOGGLE_MODE"])
+        if highlight_key and highlight_key[0] == "TOGGLE_MODE":
+            _glass(frame, 1080, 10, 1250, 65, T["accent"], alpha=0.65, radius=10)
+        else:
+            draw_rounded_rect(frame, (1080, 10), (1250, 65), (30, 26, 54), -1, 10)
+            draw_rounded_rect(frame, (1080, 10), (1250, 65), T["accent"], 1, 10)
+        sz = cv2.getTextSize(f"MODE: {mode}", cv2.FONT_HERSHEY_SIMPLEX, 0.62, 2)[0]
+        cv2.putText(frame, f"MODE: {mode}", (1080 + (170 - sz[0]) // 2, 45),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.62, (240, 240, 250), 2, cv2.LINE_AA)
+        if highlight_key and highlight_key[0] == "TOGGLE_MODE":
+            pw = int(170 * progress)
+            cv2.rectangle(frame, (1084, 57), (1084 + pw, 61), (240, 240, 250), -1)
+    button_list.append(["TOGGLE_MODE", 1080, 10, 170, 55, mode_color, "TOGGLE_MODE"])
 
     if mode in ("ASSIST", "MEMO"):
         return button_list
     elif mode == "ASL":
         if draw:
-            overlay=frame.copy()
-            cv2.rectangle(overlay,(30,130),(700,520),(10,8,6),-1)
-            cv2.addWeighted(overlay,0.6,frame,0.4,0,frame)
-            cv2.rectangle(frame,(30,130),(700,520),(80,60,200),2,cv2.LINE_AA)
-            cv2.putText(frame,"ASL SIGN LANGUAGE MODE",(50,175),
-                        cv2.FONT_HERSHEY_SIMPLEX,0.85,(100,150,255),2,cv2.LINE_AA)
-            cv2.putText(frame,"Hold a hand sign steady to type a letter",
-                        (50,210),cv2.FONT_HERSHEY_SIMPLEX,0.6,(180,180,180),1)
-            cv2.putText(frame,"Detects: A B C D E F I K L O R U V W X Y",
-                        (50,248),cv2.FONT_HERSHEY_SIMPLEX,0.55,(130,130,200),1)
+            _glass(frame, 30, 130, 700, 520, T["panel"], alpha=0.72, radius=16)
+            draw_rounded_rect(frame, (30, 130), (700, 520), T["accent"], 1, 16)
+            cv2.putText(frame, "ASL SIGN LANGUAGE MODE", (50, 175),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.85, (110, 170, 255), 2, cv2.LINE_AA)
+            cv2.putText(frame, "Hold a hand sign steady to type a letter",
+                        (50, 212), cv2.FONT_HERSHEY_SIMPLEX, 0.6, T["text_dim"], 1, cv2.LINE_AA)
+            cv2.putText(frame, "Detects: A B C D E F I K L O R U V W X Y",
+                        (50, 248), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (150, 150, 210), 1)
             if asl_letter:
-                cv2.putText(frame,asl_letter,(270,440),
-                            cv2.FONT_HERSHEY_DUPLEX,8.0,T["hover"],6,cv2.LINE_AA)
-                cv2.putText(frame,"Hold steady...",(50,475),
-                            cv2.FONT_HERSHEY_SIMPLEX,0.7,(200,200,200),2)
-                b1,b2=50,650
-                cv2.rectangle(frame,(b1,492),(b2,505),(50,50,50),-1)
-                cv2.rectangle(frame,(b1,492),(b1+int((b2-b1)*asl_progress),505),T["press"],-1)
+                cv2.putText(frame, asl_letter, (270, 440),
+                            cv2.FONT_HERSHEY_DUPLEX, 8.0, T["accent"], 6, cv2.LINE_AA)
+                cv2.putText(frame, "Hold steady...", (50, 478),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (215, 220, 230), 2)
+                b1, b2 = 50, 650
+                cv2.rectangle(frame, (b1, 494), (b2, 507), (45, 52, 70), -1)
+                cv2.rectangle(frame, (b1, 494), (b1 + int((b2 - b1) * asl_progress), 507),
+                              T["press"], -1)
             else:
-                cv2.putText(frame,"Show a sign...",(120,390),
-                            cv2.FONT_HERSHEY_SIMPLEX,1.5,(80,80,80),2)
+                cv2.putText(frame, "Show a sign...", (120, 390),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.4, (90, 96, 110), 2)
         return button_list
     elif mode == "AIR":
         if draw:
-            cv2.putText(frame,"AIR WRITING: Pinch Thumb & Index to Draw",
-                        (60,180),cv2.FONT_HERSHEY_SIMPLEX,0.8,(100,255,100),2)
-            cv2.putText(frame,"Pause 1.5s to auto-read character",
-                        (60,216),cv2.FONT_HERSHEY_SIMPLEX,0.58,(200,200,200),1)
-        cc=(highlight_key[5] if highlight_key
-            and highlight_key[0]=="CLEAR_CANVAS" else (50,50,180))
+            cv2.putText(frame, "AIR WRITING — pinch thumb & index to draw",
+                        (60, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (110, 220, 160), 2, cv2.LINE_AA)
+            cv2.putText(frame, "Pause 1.5 s to auto-read the character",
+                        (60, 218), cv2.FONT_HERSHEY_SIMPLEX, 0.58, T["text_dim"], 1, cv2.LINE_AA)
+        cc = (highlight_key[5] if highlight_key
+              and highlight_key[0] == "CLEAR_CANVAS" else (70, 90, 160))
         if draw:
-            draw_rounded_rect(frame,(1080,75),(1250,130),cc,-1,8)
-            cv2.putText(frame,"CLEAR",(1143,110),cv2.FONT_HERSHEY_SIMPLEX,0.7,(255,255,255),2)
-        button_list.append(["CLEAR_CANVAS",1080,75,170,55,cc,"CLEAR_CANVAS"])
+            if highlight_key and highlight_key[0] == "CLEAR_CANVAS":
+                _glass(frame, 1080, 75, 1250, 130, (70, 90, 160), alpha=0.7, radius=10)
+            else:
+                draw_rounded_rect(frame, (1080, 75), (1250, 130), (24, 30, 46), -1, 10)
+            draw_rounded_rect(frame, (1080, 75), (1250, 130), (110, 140, 220), 1, 10)
+            sz = cv2.getTextSize("CLEAR", cv2.FONT_HERSHEY_SIMPLEX, 0.72, 2)[0]
+            cv2.putText(frame, "CLEAR", (1080 + (170 - sz[0]) // 2, 110),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.72, (235, 240, 250), 2, cv2.LINE_AA)
+        button_list.append(["CLEAR_CANVAS", 1080, 75, 170, 55, cc, "CLEAR_CANVAS"])
         return button_list
     else:
-        sc=(highlight_key[5] if highlight_key
-            and highlight_key[0]=="SPEAK" else (30,150,200))
+        sc = (highlight_key[5] if highlight_key
+              and highlight_key[0] == "SPEAK" else (46, 130, 210))
         if draw:
-            draw_rounded_rect(frame,(1080,75),(1250,130),sc,-1,8)
-            cv2.putText(frame,"SPEAK",(1130,110),cv2.FONT_HERSHEY_SIMPLEX,0.7,(255,255,255),2)
-        button_list.append(["SPEAK",1080,75,170,55,sc,"SPEAK"])
-        tc=(highlight_key[5] if highlight_key
-            and highlight_key[0]=="THEME" else (80,120,80))
+            if highlight_key and highlight_key[0] == "SPEAK":
+                _glass(frame, 1080, 75, 1250, 130, (46, 130, 210), alpha=0.7, radius=10)
+            else:
+                draw_rounded_rect(frame, (1080, 75), (1250, 130), (18, 30, 46), -1, 10)
+            draw_rounded_rect(frame, (1080, 75), (1250, 130), (70, 160, 230), 1, 10)
+            sz = cv2.getTextSize("SPEAK", cv2.FONT_HERSHEY_SIMPLEX, 0.72, 2)[0]
+            cv2.putText(frame, "SPEAK", (1080 + (170 - sz[0]) // 2, 110),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.72, (235, 242, 250), 2, cv2.LINE_AA)
+        button_list.append(["SPEAK", 1080, 75, 170, 55, sc, "SPEAK"])
+
+        tc = (highlight_key[5] if highlight_key
+              and highlight_key[0] == "THEME" else (120, 96, 220))
         if draw:
-            draw_rounded_rect(frame,(1080,140),(1250,195),tc,-1,8)
-            cv2.putText(frame,"THEME",(1128,175),cv2.FONT_HERSHEY_SIMPLEX,0.7,(255,255,255),2)
-        button_list.append(["THEME",1080,140,170,55,tc,"THEME"])
+            if highlight_key and highlight_key[0] == "THEME":
+                _glass(frame, 1080, 140, 1250, 195, (120, 96, 220), alpha=0.7, radius=10)
+            else:
+                draw_rounded_rect(frame, (1080, 140), (1250, 195), (28, 24, 46), -1, 10)
+            draw_rounded_rect(frame, (1080, 140), (1250, 195), (160, 140, 250), 1, 10)
+            sz = cv2.getTextSize("THEME", cv2.FONT_HERSHEY_SIMPLEX, 0.72, 2)[0]
+            cv2.putText(frame, "THEME", (1080 + (170 - sz[0]) // 2, 175),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.72, (238, 236, 250), 2, cv2.LINE_AA)
+        button_list.append(["THEME", 1080, 140, 170, 55, tc, "THEME"])
 
     # Prediction row
     for idx in range(3):
-        pw=predictions[idx] if idx<len(predictions) else "..."
-        px=60+idx*260; kid=f"PRED_{idx}"
-        color=(highlight_key[5] if highlight_key
-               and highlight_key[0]==kid else T["key_bg"])
+        pw = predictions[idx] if idx < len(predictions) else "..."
+        px = 60 + idx * 260; kid = f"PRED_{idx}"
+        color = (highlight_key[5] if highlight_key
+                 and highlight_key[0] == kid else T["key_bg"])
+        hovered = highlight_key and highlight_key[0] == kid and color == T["hover"]
         if draw:
-            draw_rounded_rect(frame,(px,160),(px+240,210),color,-1,6)
-            draw_rounded_rect(frame,(px,160),(px+240,210),T["key_border"],1,6)
-            if highlight_key and highlight_key[0]==kid and color==T["hover"]:
-                bw=int(240*progress)
-                cv2.rectangle(frame,(px+6,205),(px+bw-6,209),(255,235,100),-1)
-            cv2.putText(frame,pw,(px+14,192),cv2.FONT_HERSHEY_SIMPLEX,0.6,T["text"],2)
-        button_list.append([kid,px,160,240,50,color,pw])
+            draw_rounded_rect(frame, (px, 160), (px + 240, 210),
+                              T["hover"] if hovered else T["key_bg"], -1, 8)
+            draw_rounded_rect(frame, (px, 160), (px + 240, 210),
+                              T["accent"] if hovered else T["key_border"], 1, 8)
+            txt_col = (8, 14, 24) if hovered else (T["text"] if pw != "..." else T["text_dim"])
+            cv2.putText(frame, pw, (px + 14, 192),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.62, txt_col, 2, cv2.LINE_AA)
+            if hovered:
+                bw = int(240 * progress)
+                cv2.rectangle(frame, (px + 6, 205), (px + 6 + bw, 209), T["press"], -1)
+        button_list.append([kid, px, 160, 240, 50, color, pw])
 
     # Key grid
-    row_off=[0,20,40,60]
-    for i,row in enumerate(keys):
-        for j,key in enumerate(row):
-            w,h=75,65
-            if key=="Space": w=210
-            elif key=="<":   w=100
-            x=60+j*85+row_off[i]; y=240+i*78
-            color=(highlight_key[5] if highlight_key
-                   and highlight_key[0]==key
-                   and highlight_key[1]==x
-                   and highlight_key[2]==y else T["key_bg"])
+    row_off = [0, 20, 40, 60]
+    for i, row in enumerate(keys):
+        for j, key in enumerate(row):
+            w, h = 75, 65
+            if key == "Space": w = 210
+            elif key == "<":   w = 100
+            x = 60 + j * 85 + row_off[i]; y = 240 + i * 78
+            color = (highlight_key[5] if highlight_key
+                     and highlight_key[0] == key
+                     and highlight_key[1] == x
+                     and highlight_key[2] == y else T["key_bg"])
+            active = (highlight_key and highlight_key[0] == key
+                      and highlight_key[1] == x and highlight_key[2] == y)
             if draw:
-                draw_rounded_rect(frame,(x,y),(x+w,y+h),color,-1,8)
-                draw_rounded_rect(frame,(x,y),(x+w,y+h),T["key_border"],1,8)
-                if (highlight_key and highlight_key[0]==key
-                        and highlight_key[1]==x and highlight_key[2]==y
-                        and color==T["hover"]):
-                    bw=int(w*progress)
-                    cv2.rectangle(frame,(x+8,y+h-6),(x+bw-8,y+h-2),(255,235,100),-1)
-                tx=x+26 if len(key)==1 else (x+18 if key=="<" else x+65)
-                cv2.putText(frame,key,(tx,y+40),cv2.FONT_HERSHEY_SIMPLEX,
-                            0.75 if len(key)==1 else 0.55,T["text"],2)
-            button_list.append([key,x,y,w,h,color,key])
+                draw_rounded_rect(frame, (x, y), (x + w, y + h), color, -1, 8)
+                # subtle bottom edge for depth
+                draw_rounded_rect(frame, (x + 2, y + h - 6), (x + w - 2, y + h - 2),
+                                  (14, 18, 28) if color == T["key_bg"] else (10, 18, 26), -1, 4)
+                draw_rounded_rect(frame, (x, y), (x + w, y + h),
+                                  T["key_border"] if color == T["key_bg"] else (10, 22, 34), 1, 8)
+                disp = {"Space": "SPACE", "<": "⌫"}.get(key, key)
+                fnt_sz = 0.75 if len(key) == 1 else 0.55
+                sz = cv2.getTextSize(disp, cv2.FONT_HERSHEY_SIMPLEX, fnt_sz, 2)[0]
+                txt_col = (8, 14, 24) if color != T["key_bg"] else T["text"]
+                cv2.putText(frame, disp, (x + (w - sz[0]) // 2, y + (h + sz[1]) // 2 - 2),
+                            cv2.FONT_HERSHEY_SIMPLEX, fnt_sz, txt_col, 2, cv2.LINE_AA)
+                if active and color == T["hover"]:
+                    bw = int(w * progress)
+                    cv2.rectangle(frame, (x + 6, y + h - 6), (x + 6 + bw, y + h - 2), T["press"], -1)
+            button_list.append([key, x, y, w, h, color, key])
     return button_list
 
 def get_hovered_key(x8,y8,bl):
@@ -911,10 +960,13 @@ def main():
                                 asl_stable=letter; asl_t0=time.time()
                         else:
                             asl_stable=""
-                        button_list=draw_keyboard(frame,mode=input_mode,
-                                                  theme_idx=current_theme,
-                                                  asl_letter=asl_stable,
-                                                  asl_progress=min((time.time()-asl_t0)/ASL_HOLD_TIME,1.0) if asl_stable else 0.0)
+                        # += not =: keep the top-nav MAIN MENU / SPEAK buttons
+                        # hoverable — overwriting here dropped them, so the
+                        # back button could not be clicked while a hand was visible.
+                        button_list += draw_keyboard(frame, mode=input_mode,
+                                                     theme_idx=current_theme,
+                                                     asl_letter=asl_stable,
+                                                     asl_progress=min((time.time()-asl_t0)/ASL_HOLD_TIME,1.0) if asl_stable else 0.0)
 
                     # â”€â”€ MEMO mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     elif input_mode == "MEMO":
@@ -1078,7 +1130,8 @@ def main():
                 elif input_mode not in ("ASSIST", "AIR"):
                     if input_mode == "GRID":
                         fh2, fw2 = frame.shape[:2]
-                        cv2.rectangle(frame, (0, fh2//2 - 50), (fw2, fh2), (15, 12, 10), -1)
+                        cv2.rectangle(frame, (0, fh2 // 2 - 50), (fw2, fh2),
+                                      THEMES[current_theme]["bg"], -1)
                     draw_keyboard(frame, highlight_key=active_highlight,
                                   progress=progress_pct, predictions=predictions,
                                   mode=input_mode, theme_idx=current_theme, draw=True)
@@ -1093,12 +1146,15 @@ def main():
 
             if input_mode in ("GRID", "AIR", "ASL"):
                 T = THEMES[current_theme]
-                ov = frame.copy()
-                cv2.rectangle(ov, (260, 20), (1030, 74), T["bg"], -1)
-                cv2.addWeighted(ov, 0.75, frame, 0.25, 0, frame)
-                cv2.rectangle(frame, (260, 20), (1030, 74), T["border"], 1, cv2.LINE_AA)
-                cv2.putText(frame, typed_text[-24:], (280, 58),
+                _glass(frame, 260, 20, 1030, 74, T["panel"], alpha=0.82, radius=10)
+                cv2.rectangle(frame, (260, 20), (1030, 74), T["accent"], 1, cv2.LINE_AA)
+                txt = typed_text[-24:]
+                cv2.putText(frame, txt, (280, 56),
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, T["text"], 2, cv2.LINE_AA)
+                # blinking caret
+                if int(time.time() * 2) % 2 == 0:
+                    sz = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)[0]
+                    cv2.rectangle(frame, (282 + sz[0], 30), (290 + sz[0], 58), T["hover"], -1)
 
             if demo:
                 cv2.rectangle(frame, (0, h-26), (w, h), (0, 0, 0), -1)
