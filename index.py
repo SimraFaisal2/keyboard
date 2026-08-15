@@ -1209,8 +1209,11 @@ def main():
                                     try:
                                         os.makedirs("known_faces", exist_ok=True)
                                         crop = frame[fy:fy + fh, fx:fx + fw]
-                                        cv2.imwrite(os.path.join("known_faces", f"{nm}.jpg"), crop)
-                                        n = face_id.reload()
+                                        if crop.size == 0:
+                                            print("⚠️  LEARN skipped — empty face crop")
+                                        else:
+                                            cv2.imwrite(os.path.join("known_faces", f"{nm}.jpg"), crop)
+                                            n = face_id.reload()
                                         try:
                                             tts.say(f"Learned {nm}. I now know {n} people.")
                                             tts.runAndWait()

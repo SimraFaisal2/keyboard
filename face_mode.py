@@ -59,7 +59,10 @@ class FaceID:
                     continue
                 self.names.append(name)
                 for p in imgs:
-                    prep = self._prep(cv2.imread(p))
+                    try:
+                        prep = self._prep(cv2.imread(p))
+                    except cv2.error:
+                        prep = None   # corrupt / mid-write file — skip, don't crash
                     if prep is not None:
                         xs.append(prep)
                         ys.append(label)
@@ -71,7 +74,7 @@ class FaceID:
 
     @staticmethod
     def _prep(img):
-        if img is None:
+        if img is None or img.size == 0:   # empty array → resize would raise
             return None
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         gray = cv2.resize(gray, (100, 100))
