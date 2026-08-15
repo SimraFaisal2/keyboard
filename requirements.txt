@@ -13,3 +13,5 @@ flask
 sounddevice
 soundfile
 SpeechRecognition
+insightface
+onnxruntime

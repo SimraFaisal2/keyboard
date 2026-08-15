@@ -1,15 +1,15 @@
-"""face_mode.py — biometric face identification (OpenCV LBPH).
+"""face_mode.py — biometric face identification (InsightFace embeddings).
 
-Trains a Local Binary Patterns Histograms recognizer on photos in
-``known_faces/`` and identifies people live from the camera feed:
+Replaces the old LBPH recognizer (which could not bridge lighting / pose
+drift between enrollment and runtime) with a modern face-embedding engine:
 
-    known_faces/
-        Alex/         → one folder per person (any number of photos inside)
-            a1.jpg
-        Sam.jpg       → or a single photo per person, named "<name>.jpg"
+  InsightFace (buffalo_s)  →  512-d normalized embedding per face
+  identity                  →  cosine similarity against enrolled people
 
-The recognizer is the classic LBPH algorithm (cv2.face) — no extra
-dependencies beyond opencv-contrib (already used by the app).
+The model (buffalo_s: detector + landmarks + recognizer, ~150 MB) is
+downloaded automatically on first run and cached in ~/.insightface.
+Enrollments are stored per person as ``known_faces/<Name>/embedding.npy``
+plus the raw ``sample_*.jpg`` captures for reference.
 """
 
 from __future__ import annotations
@@ -17,98 +17,114 @@ from __future__ import annotations
 import os
 import threading
 
-import cv2
 import numpy as np
 
 KNOWN_DIR = "known_faces"
-IMG_EXTS = (".jpg", ".jpeg", ".png")
-MATCH_CONFIDENCE = 60.0   # LBPH confidence below this = a match
+# Cosine similarity at/above this = the same person. Measured on this
+# camera: same person 0.94–0.98, so 0.5 leaves a huge safety margin.
+MATCH_SIMILARITY = 0.5
 
 
 class FaceID:
-    """Detect + identify faces. thread-safe (predict/train take a lock)."""
+    """Detect + identify faces with InsightFace embeddings.
+
+    The model initializes in a background thread (it takes a few seconds
+    and downloads on first run), so the app can start immediately.
+    """
 
     def __init__(self, known_dir: str = KNOWN_DIR):
         self.known_dir = known_dir
-        self.cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        self.names: list[str] = []
-        self.model = None          # cv2.face.LBPHFaceRecognizer or None
+        self.app = None            # FaceAnalysis or None until ready
+        self.init_error = ""
+        self.embeddings: dict[str, tuple[np.ndarray, int]] = {}  # name -> (mean emb, n)
         self._lock = threading.Lock()
-        self.reload()
+        threading.Thread(target=self._init_app, daemon=True).start()
+        self._load_from_disk()
 
-    # ------------------------------------------------------------- training
-    def reload(self) -> int:
-        """Re-scan known_faces/ and retrain. Returns the number of people."""
+    # ------------------------------------------------------------ model init
+    def _init_app(self):
+        try:
+            from insightface.app import FaceAnalysis
+            app = FaceAnalysis(name="buffalo_s", providers=["CPUExecutionProvider"])
+            app.prepare(ctx_id=-1, det_size=(640, 640))
+            with self._lock:
+                self.app = app
+        except Exception as e:      # pragma: no cover
+            self.init_error = str(e)
+
+    def ready(self) -> bool:
+        return self.app is not None
+
+    # ------------------------------------------------------------ storage
+    def _load_from_disk(self) -> int:
+        """Load every person's stored embedding. Returns the person count."""
         with self._lock:
-            self.names, self.model = [], None
-            xs, ys = [], []
+            self.embeddings = {}
             if not os.path.isdir(self.known_dir):
                 return 0
-            for label, entry in enumerate(sorted(os.listdir(self.known_dir))):
-                full = os.path.join(self.known_dir, entry)
-                imgs: list[str] = []
-                if os.path.isdir(full):
-                    name = entry
-                    imgs = [os.path.join(full, f) for f in sorted(os.listdir(full))
-                            if f.lower().endswith(IMG_EXTS)]
-                elif entry.lower().endswith(IMG_EXTS):
-                    name = os.path.splitext(entry)[0]
-                    imgs = [full]
-                if not imgs:
-                    continue
-                self.names.append(name)
-                for p in imgs:
+            for entry in os.listdir(self.known_dir):
+                emb_path = os.path.join(self.known_dir, entry, "embedding.npy")
+                if os.path.isfile(emb_path):
                     try:
-                        prep = self._prep(cv2.imread(p))
-                    except cv2.error:
-                        prep = None   # corrupt / mid-write file — skip, don't crash
-                    if prep is not None:
-                        xs.append(prep)
-                        ys.append(label)
-            if xs:
-                model = cv2.face.LBPHFaceRecognizer_create()
-                model.train(xs, np.array(ys, dtype=np.int32))
-                self.model = model
-            return len(self.names)
+                        emb = np.load(emb_path)
+                        self.embeddings[entry] = (emb.astype(np.float32), 1)
+                    except Exception:
+                        continue
+            return len(self.embeddings)
 
-    @staticmethod
-    def _prep(img):
-        if img is None or img.size == 0:   # empty array → resize would raise
-            return None
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray = cv2.resize(gray, (100, 100))
-        return cv2.equalizeHist(gray)
-
-    # ------------------------------------------------------------- runtime
-    def detect(self, frame):
-        """Return a list of (x, y, w, h) face boxes in the frame.
-
-        Tiered cascade settings: webcam lighting varies a lot, and the
-        strict defaults (1.15/5/60) silently miss faces in dim rooms.
-        Try strict first, then progressively more sensitive settings,
-        and return the first tier that finds anything.
-        """
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        for sf, mn, ms in ((1.15, 5, 60), (1.08, 4, 50), (1.05, 3, 45), (1.03, 2, 40)):
-            boxes = self.cascade.detectMultiScale(
-                gray, scaleFactor=sf, minNeighbors=mn, minSize=(ms, ms))
-            if len(boxes):
-                return boxes
-        return []
-
-    def identify(self, face_img) -> tuple[str | None, float]:
-        """Return (name, confidence) or (None, confidence) for a face crop."""
-        if self.model is None:
-            return None, 999.0
-        prep = self._prep(face_img)
-        if prep is None:
-            return None, 999.0
+    def add_person(self, name: str, embeddings: list[np.ndarray]) -> int:
+        """Persist a person: mean of the captured embeddings + sample files
+        are saved by the caller. Returns the new total person count."""
+        mean = np.mean(embeddings, axis=0).astype(np.float32)
+        norm = float(np.linalg.norm(mean))
+        if norm > 0:
+            mean = mean / norm
         with self._lock:
-            label, conf = self.model.predict(prep)
-        if conf < MATCH_CONFIDENCE and 0 <= label < len(self.names):
-            return self.names[label], float(conf)
-        return None, float(conf)
+            self.embeddings[name] = (mean, len(embeddings))
+        d = os.path.join(self.known_dir, name)
+        os.makedirs(d, exist_ok=True)
+        np.save(os.path.join(d, "embedding.npy"), mean)
+        return len(self.embeddings)
 
     def trained_count(self) -> int:
-        return len(self.names) if self.model is not None else 0
+        return len(self.embeddings)
+
+    def names(self) -> list[str]:
+        return sorted(self.embeddings)
+
+    # ------------------------------------------------------------ runtime
+    def process(self, frame) -> list[dict]:
+        """Detect + identify every face in the frame.
+
+        Returns a list of:
+          {"bbox": (x1, y1, x2, y2), "name": str|None,
+           "similarity": float, "embedding": ndarray|None}
+        """
+        if self.app is None:
+            return []
+        faces = self.app.get(frame)
+        out = []
+        for f in faces:
+            emb = f.normed_embedding
+            name, sim = None, 0.0
+            if emb is not None:
+                name, sim = self._match(emb)
+            out.append({
+                "bbox": tuple(float(v) for v in f.bbox),
+                "name": name,
+                "similarity": sim,
+                "embedding": emb,
+                "face": f,
+            })
+        return out
+
+    def _match(self, emb) -> tuple[str | None, float]:
+        """Return (best name, similarity) for an embedding, or (None, best)."""
+        best_name, best_sim = None, 0.0
+        for nm, (mean, _) in self.embeddings.items():
+            sim = float(np.dot(emb, mean))
+            if sim > best_sim:
+                best_sim, best_name = sim, nm
+        if best_sim >= MATCH_SIMILARITY:
+            return best_name, best_sim
+        return None, best_sim

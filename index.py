@@ -460,7 +460,7 @@ def draw_face_overlay(frame, overlay, hover_key=None, progress=0.0,
         for (fx, fy, fw, fh, name, conf) in overlay:
             col = (60, 220, 130) if name else (225, 185, 70)
             cv2.rectangle(frame, (fx, fy), (fx + fw, fy + fh), col, 2, cv2.LINE_AA)
-            label = f"{name} | {conf:.0f}" if name else "unknown"
+            label = f"{name} | {int(conf * 100)}%" if name else "unknown"
             sz = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
             cv2.rectangle(frame, (fx, fy - 30), (fx + fw, fy), col, -1)
             cv2.putText(frame, label, (fx + 8, fy - 9),
@@ -540,8 +540,8 @@ def _listen_worker(holder):
     holder["done"] = True
 
 
-def _save_learned(tts, face_id, nm, samples):
-    """Persist enrollment samples under known_faces/<name>/ and retrain."""
+def _save_learned(tts, face_id, nm, samples, embeds):
+    """Persist an enrollment: reference crops + the mean identity embedding."""
     legacy = os.path.join("known_faces", f"{nm}.jpg")
     if os.path.exists(legacy):
         os.remove(legacy)   # replace any old single-photo entry
@@ -549,7 +549,7 @@ def _save_learned(tts, face_id, nm, samples):
     os.makedirs(d, exist_ok=True)
     for i, s in enumerate(samples[:15]):
         cv2.imwrite(os.path.join(d, f"sample_{i:02d}.jpg"), s)
-    n = face_id.reload()
+    n = face_id.add_person(nm, embeds)
     try:
         tts.say(f"Learned {nm}. I now know {n} people.")
         tts.runAndWait()
@@ -1016,6 +1016,7 @@ def main():
     face_learn_until    = 0.0
     face_learn_timeout  = 0.0
     face_learn_samples  = []
+    face_learn_embeds   = []
     face_learn_last     = 0.0
     face_learn_status   = ""
     face_listen         = {"name": None, "msg": "", "done": False}
@@ -1042,11 +1043,17 @@ def main():
             # FACE mode: detect + identify faces every frame (independent of the
             # hand) so tags stay live even when the user isn't gesturing.
             if input_mode == "FACE" and face_id is not None:
-                face_overlay = []
-                for (fx, fy, fw, fh) in face_id.detect(frame):
-                    crop = frame[fy:fy + fh, fx:fx + fw]
-                    name, conf = face_id.identify(crop)
-                    face_overlay.append((fx, fy, fw, fh, name, conf))
+                if not face_id.ready():
+                    face_results = []
+                    face_overlay = []
+                    face_learn_status = face_learn_status or "warming up face model..."
+                else:
+                    face_results = face_id.process(frame)
+                    face_overlay = []
+                    for r in face_results:
+                        x1, y1, x2, y2 = (int(v) for v in r["bbox"])
+                        face_overlay.append((x1, y1, x2 - x1, y2 - y1,
+                                             r["name"], r["similarity"]))
 
                 # ── enrollment state machine (works with or without a hand) ──
                 #   capturing: collect face frames for ~2 s
@@ -1054,23 +1061,27 @@ def main():
                 now = time.time()
                 if face_learn_phase == "capturing":
                     if now < face_learn_until:
-                        largest = max(face_overlay, key=lambda b: b[2] * b[3], default=None)
-                        if largest is None:
+                        if not face_results:
                             face_learn_status = (f"capturing {face_learn_name}... "
                                                  f"face not in view")
                         elif now - face_learn_last > 0.18:
-                            fx, fy, fw, fh = largest[:4]
-                            # pad the crop ~25% so the face fills the frame
-                            # consistently across samples
+                            # largest face: keep a reference crop + its full-
+                            # frame embedding for the identity model
+                            r = max(face_results,
+                                    key=lambda r: (r["bbox"][2] - r["bbox"][0]) *
+                                                  (r["bbox"][3] - r["bbox"][1]))
+                            x1, y1, x2, y2 = (int(v) for v in r["bbox"])
+                            fx, fy, fw, fh = x1, y1, x2 - x1, y2 - y1
                             px, py = int(fw * 0.25), int(fh * 0.25)
                             x0, y0 = max(0, fx - px), max(0, fy - py)
-                            x1, y1 = min(w, fx + fw + px), min(h, fy + fh + py)
-                            crop = frame[y0:y1, x0:x1]
-                            if crop.size:
+                            x1b, y1b = min(w, fx + fw + px), min(h, fy + fh + py)
+                            crop = frame[y0:y1b, x0:x1b]
+                            if crop.size and r["embedding"] is not None:
                                 face_learn_samples.append(crop)
+                                face_learn_embeds.append(r["embedding"].copy())
                                 face_learn_last = now
                                 face_learn_status = (f"capturing {face_learn_name}... "
-                                                     f"{len(face_learn_samples)} samples")
+                                                     f"{len(face_learn_embeds)} samples")
                     else:
                         # capture window closed — ask for the spoken name
                         face_learn_phase = "listening"
@@ -1093,12 +1104,13 @@ def main():
                             nm = fb[0] if fb else "Person"
                             print(f"⚠️  Voice: {face_listen.get('msg', 'no name')} - "
                                   f"saved as {nm}")
-                        if face_learn_samples:
+                        if face_learn_embeds:
                             try:
-                                _save_learned(tts, face_id, nm, face_learn_samples)
+                                _save_learned(tts, face_id, nm,
+                                              face_learn_samples, face_learn_embeds)
                                 face_learn_status = f"learned {nm}!"
                                 print(f"✅ Learned {nm} from "
-                                      f"{len(face_learn_samples)} samples")
+                                      f"{len(face_learn_embeds)} samples")
                             except Exception as e:
                                 face_learn_status = "learn failed - try again"
                                 print(f"⚠️  LEARN failed: {e}")
@@ -1107,6 +1119,7 @@ def main():
                             print("⚠️  LEARN skipped - no face samples captured")
                         face_learn_phase = ""
                         face_learn_samples = []
+                        face_learn_embeds = []
 
             # Compute the clickable layout first so the demo pilot can aim at buttons.
             if input_mode == "MAIN_MENU":
@@ -1371,6 +1384,7 @@ def main():
                                     face_learn_until = time.time() + 2.0
                                     face_learn_timeout = 0.0
                                     face_learn_samples = []
+                                    face_learn_embeds = []
                                     face_learn_last = 0.0
                                     face_learn_status = (f"capturing {nm}... "
                                                          "look at the camera")
