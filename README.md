@@ -64,3 +64,40 @@ Everything runs on-device. No cloud account, no data leaves the machine — spee
 ## Project status
 
 See `ALL_PHASES_COMPLETE.md` / `FINAL_STATUS.md` for the build-out history, `PORTFOLIO.md` for a one-page demo/interview guide, and `AGENTS.md` for development conventions.
+
+---
+
+## Camera app — `index.py` (Emergency AI Communication Interface)
+
+The camera-first interface behind the gesture modes: a hand-tracked virtual
+keyboard, air writing, and sign input, all controlled by your fingers in front
+of a webcam (MediaPipe hand tracking).
+
+### Modes
+
+| Mode | What it does |
+| --- | --- |
+| `GRID`   | Hover-to-click virtual keyboard with live word prediction (type by hovering each key) |
+| `AIR`    | Pinch thumb + index together and write in the air; pause 1.5 s to auto-read the character (OCR) |
+| `ASL`    | Hold a single-letter hand sign steady to type (A B C D E F I K L O R U V W X Y) |
+| `ASSIST` | Emergency gestures (HELP / EMERGENCY / PAIN / WATER / FOOD / TOILET / YES / NO) — needs `train_model.py` to build the model first |
+| `MEMO`   | Personal object memory — teach an object, say its name, recall it later |
+
+### Run it
+
+```bash
+pip install -r requirements.txt        # heavy deps: mediapipe, pyautogui, pytesseract, symspellpy
+python index.py                        # opens your webcam (GRID mode from the main menu)
+python index.py --camera 1             # pick a different webcam index
+python index.py --demo                 # self-driving tour — NO webcam needed
+```
+
+The `--demo` flag drives a synthetic hand through the real state machine
+(main menu → type "HELP" on the GRID keyboard → tap a word suggestion →
+AIR pinch-drawing → back to the menu), so the project can be demonstrated on
+any machine — no camera required.
+
+Controls: hover a key for ~0.45 s to click it; pinch thumb + index for 1.5 s in
+GRID mode to switch to ASL; show two open palms to escape to the main menu;
+press `q` to quit. Note: keys are pressed into whatever window has focus
+(`pyautogui`), so point it at a text editor to see the output.

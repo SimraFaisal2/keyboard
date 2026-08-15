@@ -16,6 +16,9 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+import argparse
+from types import SimpleNamespace
+
 import cv2
 import numpy as np
 import pyautogui
@@ -533,10 +536,173 @@ def get_hovered_key(x8,y8,bl):
     return None
 
 # â”€â”€â”€ Main â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+class DemoPilot:
+    """Synthetic-hand auto-pilot: drives the real state machine with no webcam.
+
+    Generates plausible MediaPipe-style hand landmarks and frames so every
+    existing mode (hover-to-click keyboard, word predictions, AIR pinch-drawing)
+    runs unmodified. The scenario loops a tour:
+
+        MAIN MENU -> type "HELP" on the GRID keyboard -> tap a word suggestion
+        -> switch to AIR -> pinch-draw a wave -> back to the main menu
+    """
+    # 21-landmark offsets (normalized) relative to the index fingertip (#8).
+    # Fingers point "up" (smaller y); y grows downward in image space.
+    _OPEN = {
+        0: (0.00, 0.22),  1: (-0.02, 0.18), 2: (-0.04, 0.14), 3: (-0.05, 0.09), 4: (-0.06, 0.04),
+        5: (0.00, 0.11),  6: (0.00, 0.07),  7: (0.00, 0.03),  8: (0.00, 0.00),
+        9: (0.02, 0.11), 10: (0.02, 0.07), 11: (0.02, 0.03), 12: (0.02, -0.02),
+       13: (0.045, 0.115), 14: (0.045, 0.075), 15: (0.045, 0.035), 16: (0.045, -0.005),
+       17: (0.065, 0.12), 18: (0.065, 0.085), 19: (0.065, 0.05), 20: (0.065, 0.02),
+    }
+    # "Pointing" pose: index up, other fingertips curled below their knuckles —
+    # deliberately NOT an open palm so the GRID volume gesture never fires.
+    _POINT = dict(_OPEN)
+    _POINT.update({12: (0.02, 0.10), 16: (0.045, 0.12), 20: (0.065, 0.13)})
+    # "Pinch" pose: thumb tip pulled next to the index tip (dist < 40 px).
+    _PINCH = dict(_OPEN)
+    _PINCH[4] = (0.015, 0.015)
+
+    WORD = "HELP"
+
+    def __init__(self):
+        self.frame_w, self.frame_h = 1280, 720
+        self._bg = None
+        self.phase = "menu"   # menu -> grid_type -> grid_pred -> air_switch -> air_draw -> air_idle -> back_to_menu
+        self.phase_start = time.time()
+        self.letter_idx = 0
+        self.word_start_len = 0
+        self.label = "waiting…"
+
+    # ------------------------------------------------------------ frames
+    def next_frame(self):
+        if self._bg is None:
+            bg = np.full((self.frame_h, self.frame_w, 3), (14, 16, 22), dtype=np.uint8)
+            for x in range(0, self.frame_w, 64):
+                cv2.line(bg, (x, 0), (x, self.frame_h), (24, 28, 36), 1)
+            for y in range(0, self.frame_h, 64):
+                cv2.line(bg, (0, y), (self.frame_w, y), (24, 28, 36), 1)
+            self._bg = bg
+        return self._bg.copy()
+
+    # ------------------------------------------------------------- hands
+    class _FakeLm(SimpleNamespace):
+        """Protobuf-compatible landmark: mediapipe's renderer calls HasField()."""
+        def HasField(self, name):
+            return False
+
+    def _hand(self, target, pose):
+        offs = self._PINCH if pose == "pinch" else (self._POINT if pose == "point" else self._OPEN)
+        lms = [self._FakeLm(x=target[0] + dx, y=target[1] + dy, z=0.0)
+               for dx, dy in (offs[i] for i in range(21))]
+        return SimpleNamespace(landmark=lms)
+
+    def next_result(self, button_list, input_mode, typed_text):
+        target, pose = self._plan(button_list, input_mode, typed_text)
+        hand = self._hand(target, pose)
+        return SimpleNamespace(multi_hand_landmarks=[hand], multi_handedness=[])
+
+    def status(self):
+        return self.label
+
+    # ------------------------------------------------------------ logic
+    def _center(self, b):
+        if not b:
+            return (0.5, 0.4)
+        cx = (b[1] + b[3] / 2.0) / self.frame_w
+        cy = (b[2] + b[4] / 2.0) / self.frame_h
+        return (min(max(cx, 0.02), 0.98), min(max(cy, 0.02), 0.98))
+
+    @staticmethod
+    def _find(bl, ident):
+        for b in bl:
+            if b and b[0] == ident:
+                return b
+        return None
+
+    @staticmethod
+    def _find_pred(bl):
+        for b in bl:
+            if b and b[0].startswith("PRED_") and len(b) > 6 and b[6] != "...":
+                return b
+        return None
+
+    def _plan(self, bl, mode, text):
+        now = time.time()
+        # --- reactive transitions (driven by the real state machine) ---
+        if mode == "MAIN_MENU" and self.phase != "menu":
+            self.phase, self.phase_start = "menu", now
+        elif mode == "GRID" and self.phase == "menu":
+            self.phase, self.phase_start = "grid_type", now
+            self.letter_idx, self.word_start_len = 0, len(text)
+        elif mode == "AIR" and self.phase == "air_switch":
+            self.phase, self.phase_start = "air_draw", now
+
+        # --- phase targets ---
+        if self.phase == "grid_type":
+            if len(text) >= self.word_start_len + len(self.WORD):
+                self.phase, self.phase_start = "grid_pred", now
+                self.word_start_len = len(text)   # re-anchor: text must GROW to mean the PRED click
+            else:
+                ch = self.WORD[self.letter_idx]
+                if len(text) >= self.word_start_len + self.letter_idx + 1:
+                    self.letter_idx = min(self.letter_idx + 1, len(self.WORD) - 1)
+                    ch = self.WORD[self.letter_idx]
+                self.label = f"GRID — hovering “{ch}”"
+                return self._center(self._find(bl, ch)), "point"
+        if self.phase == "grid_pred":
+            # The only way text grows in this phase is the PRED click itself
+            # (it replaces the word + appends a space) — advance on any change.
+            if len(text) != self.word_start_len:
+                self.phase, self.phase_start = "air_switch", now
+            else:
+                b = self._find_pred(bl)
+                if b is None:
+                    if now - self.phase_start > 3.0:
+                        self.phase, self.phase_start = "air_switch", now
+                    self.label = "GRID — waiting for word suggestions…"
+                    return (0.80, 0.58), "point"
+                self.label = "GRID — tapping a word suggestion"
+                return self._center(b), "point"
+        if self.phase == "air_switch":
+            self.label = "GRID — switching to AIR writing"
+            return self._center(self._find(bl, "TOGGLE_MODE")), "point"
+        if self.phase == "air_draw":
+            frac = min((now - self.phase_start) / 3.5, 1.0)
+            if frac >= 1.0:
+                self.phase, self.phase_start = "air_idle", now
+            else:
+                x = 0.30 + 0.40 * frac
+                y = 0.45 + 0.12 * math.sin(frac * 3 * 2 * math.pi)
+                self.label = "AIR — pinch-drawing a wave"
+                return (x, y), "pinch"
+        if self.phase == "air_idle":
+            if now - self.phase_start > 2.2:
+                self.phase, self.phase_start = "back_to_menu", now
+            self.label = "AIR — reading the drawn character…"
+            return (0.78, 0.62), "point"
+        if self.phase == "back_to_menu":
+            self.label = "AIR — returning to the menu"
+            return self._center(self._find(bl, "MAIN_MENU")), "point"
+
+        self.label = "MAIN MENU — entering GRID keyboard"
+        return self._center(self._find(bl, "GRID")), "point"
+
+
 def main():
-    cap = cv2.VideoCapture(0)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+    parser = argparse.ArgumentParser(
+        description="Emergency AI Communication Interface — hand-tracked keyboard & air writing")
+    parser.add_argument("--demo", action="store_true",
+                        help="run with a synthetic hand — no webcam needed (self-driving tour)")
+    parser.add_argument("--camera", type=int, default=0,
+                        help="webcam index (default: 0)")
+    args = parser.parse_args()
+
+    demo = DemoPilot() if args.demo else None
+    cap = None if args.demo else cv2.VideoCapture(args.camera)
+    if cap is not None:
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
     tts = pyttsx3.init()
     tts.setProperty('rate', 150)
@@ -602,7 +768,10 @@ def main():
 
     try:
         while True:
-            ok, frame = cap.read()
+            if demo:
+                ok, frame = True, demo.next_frame()
+            else:
+                ok, frame = cap.read()
             if not ok: break
             frame = cv2.flip(frame, 1)
 
@@ -612,9 +781,7 @@ def main():
             h, w, _ = frame.shape
             predictions = get_predictions(typed_text)
 
-            rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            result = hands.process(rgb)
-
+            # Compute the clickable layout first so the demo pilot can aim at buttons.
             if input_mode == "MAIN_MENU":
                 button_list = draw_main_menu(frame, active_highlight, progress_pct, draw=False)
             else:
@@ -628,6 +795,12 @@ def main():
                                                  asl_letter=asl_stable,
                                                  asl_progress=min((time.time()-asl_t0)/ASL_HOLD_TIME,1.0) if asl_stable else 0.0,
                                                  draw=False)
+
+            rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if demo:
+                result = demo.next_result(button_list, input_mode, typed_text)
+            else:
+                result = hands.process(rgb)
 
             active_highlight = None
             progress_pct     = 0.0
@@ -912,10 +1085,16 @@ def main():
                 cv2.putText(frame, typed_text[-24:], (280, 58),
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, T["text"], 2, cv2.LINE_AA)
 
+            if demo:
+                cv2.rectangle(frame, (0, h-26), (w, h), (0, 0, 0), -1)
+                cv2.putText(frame, "DEMO MODE — synthetic hand (no webcam)  |  " + demo.status(),
+                            (10, h-8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (60, 200, 255), 1, cv2.LINE_AA)
+
             cv2.imshow("Emergency AI Communication Interface", frame)
             if cv2.waitKey(1)&0xFF==ord('q'): break
     finally:
-        cap.release()
+        if cap is not None:
+            cap.release()
         cv2.destroyAllWindows()
 
 if __name__=="__main__":
