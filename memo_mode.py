@@ -223,6 +223,10 @@ class MemoSession:
                 match = self.matcher.match(vec, self._catalog)
                 if match:
                     self.last_match = match
+                    # Share this recognition with the caregiver console: it reads
+                    # the same recall log the web app reads (one storage layer).
+                    self.vault.log_recall(obj_id=match.object_id, name=match.name,
+                                          confidence=match.confidence, matched=True)
                     # Speak name if cooldown elapsed
                     last = self.last_spoken.get(match.object_id, 0)
                     if now - last > RECALL_COOLDOWN:
@@ -231,6 +235,7 @@ class MemoSession:
                     self.status_msg = f"I know this: {match.name}"
                 else:
                     self.last_match = None
+                    self.vault.log_recall(name="unknown", confidence=0.0, matched=False)
                     self.status_msg = "Unknown object.  PINCH to teach me its name."
 
         # Pinch → enter CAPTURING

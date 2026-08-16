@@ -15,6 +15,11 @@ _face_run.*
 # Biometric data enrolled via FACE mode (personal, never commit)
 known_faces/
 
+# Live runtime logs (camera events, recalls, safety events) — app state, never commit
+memory/gesture_alerts.jsonl
+memory/recalls.jsonl
+memory/safety_events.jsonl
+
 # IDE / editor
 .idea/
 .vscode/

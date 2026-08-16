@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 
 from memory.safety_monitor import SafetyMonitor
 from memory.task_guidance import TASK_LOG_PATH
+from memory.alerts import GESTURE_ALERTS_PATH
 
 
 ACTIVITY_LOG_PATH = os.path.join("memory", "activity_log.jsonl")
@@ -31,6 +32,7 @@ class CaregiverReport:
         cutoff = datetime.now() - timedelta(hours=hours)
         activities = self._read_jsonl_since(self.activity_path, cutoff)
         task_events = self._read_jsonl_since(self.task_log_path, cutoff)
+        gesture_alerts = self._read_jsonl_since(GESTURE_ALERTS_PATH, cutoff)
         safety_events = [
             event.to_dict()
             for event in self.safety_monitor.list_events(limit=200)
@@ -43,6 +45,7 @@ class CaregiverReport:
             "facts": {
                 "activity_events": activities,
                 "task_events": task_events,
+                "gesture_alerts": gesture_alerts,
                 "safety_events": safety_events,
             },
             "uncertainty_note": (
@@ -53,6 +56,7 @@ class CaregiverReport:
             "summary": {
                 "activity_count": len(activities),
                 "task_event_count": len(task_events),
+                "gesture_alert_count": len(gesture_alerts),
                 "safety_event_count": len(safety_events),
                 "unacknowledged_safety_count": len(
                     [event for event in safety_events if not event.get("acknowledged")]
@@ -80,7 +84,8 @@ class CaregiverReport:
                     continue
                 try:
                     entry = json.loads(line)
-                    timestamp = datetime.fromisoformat(entry["timestamp"])
+                    timestamp = datetime.fromisoformat(
+                        entry.get("timestamp") or entry.get("ts") or "")
                 except Exception:
                     continue
                 if timestamp >= cutoff:

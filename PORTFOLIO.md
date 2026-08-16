@@ -1,4 +1,4 @@
-# MEMO Portfolio & Interview Guide
+# MemoryMate Portfolio & Interview Guide
 
 One-page reference for demos, interviews, and README material.
 
@@ -7,6 +7,18 @@ One-page reference for demos, interviews, and README material.
 ## Elevator Pitch
 
 > I built an on-device assistive communication and memory system that combines hand-gesture control, air writing, sign-language input, emergency gesture recognition, and a dementia support layer called MEMO. The app lets users teach personal objects, guide daily routines, trigger calm reminders, and share a caregiver dashboard. Everything runs locally for privacy and low friction.
+
+**One line for a resume/LinkedIn:**
+
+> MemoryMate — an offline-first assistive system fusing real-time computer vision (MediaPipe hand tracking, InsightFace embeddings, OCR air-writing), gesture-driven accessibility (GRID/AIR/ASL/ASSIST), and a caregiver dashboard over a single shared local data core.
+
+**Alternate lines:**
+
+> Built a camera-driven accessibility platform where a user navigates a virtual keyboard, writes in air, signs, and signals emergencies — with a Flask caregiver console that surfaces every event from one local-first data layer.
+
+> Real-time CV + accessibility + privacy architecture: hand-gesture HCI, biometric face ID via 512-d embeddings, and a unified patient/caregiver system that never leaves the device.
+
+> End-to-end assistive-tech product: from MediaPipe hand landmarks to a caregiver daily report, with memory recall, safety monitoring, and voice enrollment — one command to run, fully offline.
 
 ---
 
@@ -28,8 +40,29 @@ One-page reference for demos, interviews, and README material.
 | Emergency mode | Gesture classifier for help / pain / water / urgent cues |
 | Memory mode | Teach and recall personal objects with location and context |
 | Dementia support | Routine prompts, comfort mode, guided tasks, safety events |
-| Caregiver view | Local Flask dashboard for objects, routines, tasks, and logs |
+| Caregiver view | Local Flask console for objects, routines, tasks, alerts, and logs |
+| Face ID | InsightFace embeddings — learn a face by voice, greeted by name |
 | Speech | Offline TTS prompts with calm voice settings |
+
+---
+
+## Unified Architecture
+
+**One entry point, three surfaces — all sharing one local data core:**
+
+```text
+python memorymate.py --web       →  Flask :5000  (patient pages + /caregiver console)
+python memorymate.py --camera    →  gesture interface (GRID/AIR/ASL/FACE/ASSIST/MEMO)
+python memorymate.py --demo      →  synthetic-hand tour + auto-starts --web side-by-side
+
+memory/  ← single source of truth
+ ├─ objects.db          EnhancedMemoryVault (objects, thumbnails, embeddings)
+ ├─ activity_log.jsonl  reminders/tasks/gestures
+ ├─ alerts.jsonl        ASSIST-mode HELP/PAIN/urgent gestures (camera → caregiver)
+ └─ safety_events.jsonl  exit-risk events, surfaced in the console + daily report
+```
+
+The camera app is a **client** of the shared core, not a parallel app: an object taught by camera appears in `/objects`, an emergency gesture lands in the caregiver console and daily report.
 
 ---
 
@@ -40,7 +73,8 @@ One-page reference for demos, interviews, and README material.
 | `GRID` | Hover-to-click virtual keyboard with word prediction |
 | `AIR` | Pinch-to-draw air writing with OCR support |
 | `ASL` | Sign-based typing from hand landmarks |
-| `ASSIST` | Emergency gesture recognition and spoken alerts |
+| `ASSIST` | Emergency gesture recognition + spoken alerts → caregiver alerts log |
+| `FACE` | InsightFace biometric ID — voice-name enrollment, "Hello, <name>" greeting |
 | `MEMO` | Personal object memory, reminders, comfort, and caregiver support |
 
 ---
@@ -58,25 +92,29 @@ One-page reference for demos, interviews, and README material.
 
 ---
 
-## 2-Minute Demo
+## 2-Minute Demo (no camera needed)
 
-1. Open `python index.py` and show the camera UI.
-2. Switch to `ASSIST` and trigger a gesture like `WATER` or `HELP`.
-3. Switch to `MEMO` and teach a personal object.
-4. Recall the object and show the spoken cue plus matching evidence.
-5. Open the caregiver dashboard and show routines, tasks, and safety events.
-6. Trigger comfort mode and show the calm response flow.
+```bash
+python memorymate.py --demo
+```
+
+One command spins up the web app **and** runs the synthetic-hand tour together, so a reviewer can watch the whole loop:
+
+1. Teach an object via the camera UI → appears in `/objects`
+2. Trigger a routine reminder → logged to activity
+3. Signal an emergency gesture (HELP) → lands in `memory/alerts.jsonl`
+4. Watch it appear on the caregiver console and in the daily report
 
 ---
 
-## Offline Demo
+## Interview Talking Points
 
-```powershell
-python create_demo_images.py
-python collect_memo.py --folder demo_objects/
-python evaluate_memo.py --folder demo_objects/
-python caregiver_dashboard.py
-```
+- **Real-time CV range:** MediaPipe hand landmarks → hover/pinch HCI, ASL heuristics, OCR air-writing (Tesseract), InsightFace face embeddings for biometric ID.
+- **Accessibility-first interaction:** large targets, hover delays, pinch confirmation, calm prompts, voice-driven enrollment.
+- **Privacy by default:** local inference and local storage, no cloud dependency — nothing leaves the device.
+- **Full-stack integration:** camera client + Flask console reading one shared data core; alerts, recalls, and safety events all surface in the caregiver view and daily report.
+- **Safe uncertainty:** the system reports what it observed, not medical certainty.
+- **Practical ML:** gesture classification for fixed actions, embedding retrieval (cosine similarity) for open-ended face/object memory.
 
 ---
 
@@ -84,11 +122,10 @@ python caregiver_dashboard.py
 
 ```text
 Webcam
-  -> hand landmarks / ROI
-  -> mode router in index.py
-  -> MEMO state machine or gesture classifier
-  -> local storage and TTS
-  -> caregiver dashboard and logs
+  -> hand landmarks / ROI (MediaPipe)
+  -> mode router in index.py (GRID/AIR/ASL/FACE/ASSIST/MEMO)
+  -> shared local core in memory/ (vault, alerts, activity, safety)
+  -> caregiver console + daily report (Flask)
 ```
 
 MEMO itself combines:
@@ -106,27 +143,17 @@ events -> caregiver report
 
 | File | Why it matters |
 |------|----------------|
-| `index.py` | Main runtime and mode switcher |
-| `memo_mode.py` | Earlier MEMO interaction flow and camera UI |
-| `memo_mode_integrated.py` | Higher-level MEMO orchestration with comfort, family, routines |
+| `memorymate.py` | Single unified entry point (`--web` / `--camera` / `--demo`) |
+| `index.py` | Camera runtime and mode router |
+| `memo_mode.py` | MEMO interaction flow and camera UI |
+| `face_mode.py` | InsightFace embedding engine (detect, enroll, greet) |
+| `memory/alerts.py` | Camera→caregiver alert bridge (single source of truth) |
 | `memory/object_model.py` | Local object vault and metadata |
 | `memory/routines.py` | Editable routine and reminder store |
 | `memory/task_guidance.py` | Step-by-step task flow |
 | `memory/safety_monitor.py` | Conservative safety event tracking |
 | `memory/reporting.py` | Caregiver summaries and exports |
-| `caregiver_web.py` | Flask dashboard and API layer |
 | `train_model.py` | Gesture training pipeline |
-| `evaluate_memo.py` | Recall and matching evaluation |
-
----
-
-## Interview Talking Points
-
-- Accessibility-first interaction: large targets, hover delays, pinch confirmation, calm prompts.
-- Privacy by default: local inference and local storage, no cloud dependency.
-- Practical ML: gesture classification for fixed actions, embedding retrieval for open-ended object memory.
-- Caregiver-aware design: dashboard visibility, routine control, and event logging.
-- Safe uncertainty: the system reports what it observed, not medical certainty.
 
 ---
 
@@ -136,13 +163,9 @@ events -> caregiver report
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-python index.py
-```
-
-If you want the caregiver dashboard separately:
-
-```powershell
-python caregiver_web.py
+python memorymate.py --demo      # watch the whole loop
+python memorymate.py --web       # caregiver console at http://localhost:5000/caregiver
+python memorymate.py --camera    # full gesture interface
 ```
 
 ---

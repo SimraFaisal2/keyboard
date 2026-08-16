@@ -71,6 +71,7 @@ class EnhancedMemoryVault:
         self.photos_dir = os.path.join(self.objects_dir, "photos")
         self.voices_dir = os.path.join(self.objects_dir, "voices")
         self.db_path = os.path.join(base_path, "objects.db")
+        self.recalls_path = os.path.join(base_path, "recalls.jsonl")
         
         # Create directories
         os.makedirs(self.photos_dir, exist_ok=True)
@@ -348,3 +349,88 @@ class EnhancedMemoryVault:
             'objects': [obj.to_dict() for obj in self.objects.values()],
             'export_time': datetime.datetime.now().isoformat(),
         }
+
+    # ─── Recall tracking (shared with the caregiver console) ──────────────────
+    # Every time the camera recognises (or fails to recognise) an object, MEMO
+    # mode appends one line to memory/recalls.jsonl. The web app's caregiver
+    # console reads the same file, so camera activity is visible to caregivers
+    # without any separate sync step — one storage layer, two surfaces.
+
+    def log_recall(self, obj_id: Optional[str] = None, name: str = "",
+                   confidence: float = 0.0, matched: bool = False,
+                   demo: bool = False) -> None:
+        """Record one object-recognition attempt. Never raises."""
+        try:
+            entry = {
+                "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                "id": obj_id,
+                "name": name or "unknown",
+                "confidence": round(float(confidence), 3),
+                "matched": bool(matched),
+                "demo": bool(demo),
+            }
+            with open(self.recalls_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception:
+            pass
+
+    def _read_recalls(self, days: Optional[int] = None) -> List[Dict[str, Any]]:
+        if not os.path.exists(self.recalls_path):
+            return []
+        cutoff = None
+        if days is not None:
+            cutoff = datetime.datetime.now() - datetime.timedelta(days=days)
+        entries = []
+        try:
+            with open(self.recalls_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        e = json.loads(line)
+                    except Exception:
+                        continue
+                    if cutoff is not None:
+                        try:
+                            if datetime.datetime.fromisoformat(e.get("ts", "")) < cutoff:
+                                continue
+                        except Exception:
+                            continue
+                    entries.append(e)
+        except Exception:
+            return []
+        return entries
+
+    def recall_stats(self, days: int = 7) -> List[Dict[str, Any]]:
+        """Per-object recall counts + average confidence over the window.
+
+        Shape mirrors the old read-only dashboard's expectations so the
+        caregiver console can render the same merged view.
+        """
+        by_id: Dict[str, Dict[str, Any]] = {}
+        for e in self._read_recalls(days=days):
+            oid = e.get("id") or "unknown"
+            s = by_id.setdefault(oid, {
+                "id": oid,
+                "name": e.get("name") or "unknown",
+                "recall_count": 0,
+                "conf_sum": 0.0,
+                "matched": 0,
+            })
+            s["recall_count"] += 1
+            s["conf_sum"] += float(e.get("confidence") or 0.0)
+            if e.get("matched"):
+                s["matched"] += 1
+        out = []
+        for s in by_id.values():
+            n = s.pop("recall_count")
+            s["recall_count"] = n
+            s["avg_confidence"] = round(s.pop("conf_sum") / n, 3) if n else 0.0
+            out.append(s)
+        out.sort(key=lambda s: s["recall_count"], reverse=True)
+        return out
+
+    def recent_recalls(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Most recent recognition attempts, newest first."""
+        return self._read_recalls()[::-1][:limit]

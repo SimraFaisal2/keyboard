@@ -34,6 +34,8 @@
   .dim { color: #6b8299; font-size: 13px; }
   .tag { background: #eef2f6; border-radius: 999px; padding: 2px 10px; font-size: 12px; color: #4a5d70; }
   .tag.med { background: #fdeaea; color: #b04040; }
+  .tag.demo { background: #fff3d6; color: #9a6b00; }
+  .tag.gesture { background: #fdeaea; color: #b04040; }
   .alert-line { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
   .alert-line .t { color: #8aa0b5; }
   .msg { margin-top: 10px; font-size: 14px; font-weight: 600; }
@@ -51,6 +53,7 @@
   <div class="stat"><div class="n">{{ stats.family }}</div><div class="l">Family</div></div>
   <div class="stat"><div class="n">{{ stats.overdue }}</div><div class="l">Overdue visits</div></div>
   <div class="stat"><div class="n">{{ stats.tasks }}</div><div class="l">Tasks</div></div>
+  <div class="stat"><div class="n">{{ stats.gestures }}</div><div class="l">Emergency signals (24h)</div></div>
 </div>
 
 <div class="cols">
@@ -167,8 +170,49 @@
     </div>
 
     <div class="card">
+      <h2>🚨 Emergency gestures (camera)</h2>
+      <p class="dim" style="margin-bottom:8px">HELP / PAIN / WATER / urgent signals detected by the gesture interface — live from the camera app.</p>
+      <ul id="gesture-list">
+        {% for g in gesture_alerts %}
+        <li class="alert-line">
+          <span><strong>{{ g.gesture }}</strong>{% if g.demo %}<span class="tag demo">demo</span>{% endif %} &middot; {{ (g.confidence * 100)|round|int }}%</span>
+          <span class="t">{{ g.ts[11:19] }}</span>
+        </li>
+        {% endfor %}
+        {% if not gesture_alerts %}<li class="dim">No emergency gestures from the camera yet.</li>{% endif %}
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>🔍 Recent recalls (camera)</h2>
+      <p class="dim" style="margin-bottom:8px">Objects recognised (or missed) by MEMO mode — a taught object shows up here automatically.</p>
+      <ul id="recall-list">
+        {% for r in recalls %}
+        <li class="alert-line">
+          <span>{% if r.matched %}&#10003;{% else %}&#10007;{% endif %} {{ r.name }}{% if r.demo %}<span class="tag demo">demo</span>{% endif %}{% if r.matched %} ({{ (r.confidence * 100)|round|int }}%){% endif %}</span>
+          <span class="t">{{ r.ts[11:19] }}</span>
+        </li>
+        {% endfor %}
+        {% if not recalls %}<li class="dim">No recalls yet — teach an object in MEMO mode.</li>{% endif %}
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>🛡️ Safety events</h2>
+      <ul id="safety-list">
+        {% for e in safety_events %}
+        <li class="alert-line">
+          <span>{{ e.reason }}{% if e.facts and e.facts.get('demo') %}<span class="tag demo">demo</span>{% endif %}</span>
+          <span class="t">{{ e.timestamp[11:19] }}</span>
+        </li>
+        {% endfor %}
+        {% if not safety_events %}<li class="dim">No safety events recorded.</li>{% endif %}
+      </ul>
+    </div>
+
+    <div class="card">
       <h2>📋 Activity log (last 48h)</h2>
-      <ul>
+      <ul id="activity-list">
         {% for a in activities[:15] %}
         <li class="alert-line"><span>{{ a.event }}{% if a.details %}: {{ a.details if a.details is string else a.details }}{% endif %}</span><span class="t">{{ a.timestamp[11:19] }}</span></li>
         {% endfor %}
@@ -234,6 +278,42 @@
   }
   async function taskDone() { await post('/api/tasks/done'); location.reload(); }
   async function taskSkip() { await post('/api/tasks/skip'); location.reload(); }
+
+  // Live refresh: camera events (gestures, recalls, safety) and activity
+  // appear on the console without reloading — the camera app writes to the
+  // same local logs this page polls every 5 s.
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function demoPill(e) { return e && e.demo ? ' <span class="tag demo">demo</span>' : ''; }
+  function hhmm(ts) { return esc((ts || '').slice(11, 19)); }
+  async function refreshLive() {
+    try {
+      const d = await (await fetch('/api/live')).json();
+      const g = d.gesture_alerts || [];
+      document.getElementById('gesture-list').innerHTML = g.length ? g.map(x =>
+        '<li class="alert-line"><span><strong>' + esc(x.gesture) + '</strong>' + demoPill(x) +
+        ' &middot; ' + Math.round((x.confidence || 0) * 100) + '%</span><span class="t">' + hhmm(x.ts) + '</span></li>'
+      ).join('') : '<li class="dim">No emergency gestures yet.</li>';
+      const r = d.recalls || [];
+      document.getElementById('recall-list').innerHTML = r.length ? r.map(x =>
+        '<li class="alert-line"><span>' + (x.matched ? '&#10003;' : '&#10007;') + ' ' + esc(x.name) + demoPill(x) +
+        (x.matched ? ' (' + Math.round((x.confidence || 0) * 100) + '%)' : '') + '</span><span class="t">' + hhmm(x.ts) + '</span></li>'
+      ).join('') : '<li class="dim">No recalls yet.</li>';
+      const s = d.safety_events || [];
+      document.getElementById('safety-list').innerHTML = s.length ? s.map(x =>
+        '<li class="alert-line"><span>' + esc(x.reason) + demoPill(x) + '</span><span class="t">' + hhmm(x.timestamp) + '</span></li>'
+      ).join('') : '<li class="dim">No safety events.</li>';
+      const a = d.activities || [];
+      document.getElementById('activity-list').innerHTML = a.length ? a.slice(0, 15).map(x =>
+        '<li class="alert-line"><span>' + esc(x.event) + (x.details ? ': ' + esc(typeof x.details === 'string' ? x.details : JSON.stringify(x.details)) : '') +
+        '</span><span class="t">' + hhmm(x.timestamp) + '</span></li>'
+      ).join('') : '<li class="dim">No activity yet.</li>';
+    } catch (e) { /* keep the last good render */ }
+  }
+  setInterval(refreshLive, 5000);
 </script>
 </body>
 </html>

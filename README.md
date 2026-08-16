@@ -1,28 +1,87 @@
-# MemoryMate (MEMO) — Assistive Communication & Memory System
+# MemoryMate — Assistive Communication & Memory System
 
 <img src="photo.png" alt="Simra Faisal" width="140" align="right"/>
 
-An on-device assistive system for people with limited mobility, speech difficulties, or early cognitive decline — plus a caregiver dashboard for visibility without being intrusive.
+**MemoryMate is an on-device communication and memory aid for people with limited mobility, speech difficulties, or early cognitive decline — with a caregiver dashboard that makes everything visible without being intrusive.**
 
-> **Elevator pitch:** camera-first interaction (hand gestures, air writing, sign input) combined with a dementia-support layer — teach personal objects, guide daily routines, trigger calm reminders, and share a caregiver dashboard. Everything runs locally for privacy and low friction.
+A person who struggles to type or speak can wave at a camera: hover to type on a virtual keyboard, write in the air, sign letters, fire an emergency HELP gesture, or hold up an object and hear it named. A caregiver opens one local dashboard and sees every object taught, every recall, every emergency gesture, and every safety event — no cloud, no account, nothing leaves the device.
 
-## What it solves
+## The 10-second demo (no camera, no setup)
 
-Standard keyboards and phones are hard to use for the primary users, while familiar objects and routines become harder to track without support. MemoryMate replaces that with:
+```bash
+python memorymate.py --demo
+```
 
-- **Camera-first interaction** — MediaPipe hand tracking for hover, pinch, and sign input
-- **Local memory storage** — objects, routines, and logs stay on-device
-- **Caregiver-aware assistance** — visibility without being intrusive
+That one command runs the **synthetic-hand camera tour** *and* the **caregiver dashboard** together: the hand types HELP on the virtual keyboard while the dashboard fills with labelled DEMO events — an object taught, an emergency gesture fired, a safety event — so the whole loop is visible in under two minutes.
+
+## Quickstart
+
+Requires Python 3.9+.
+
+```bash
+# Everything the web app needs (fast, reliable install)
+pip install -r requirements-core.txt
+
+# One entry point, four surfaces:
+python memorymate.py            # web app — patient pages + caregiver console (:5000)
+python memorymate.py --web      # same as above (default mode)
+python memorymate.py --camera   # camera/gesture interface (needs requirements.txt + webcam)
+python memorymate.py --demo     # camera-free tour + dashboard, nothing to configure
+```
+
+Open `http://localhost:5000` — patient pages (`/`, `/objects`, `/family`,
+`/comfort`, `/tasks`, `/today`) and the caregiver console at `/caregiver`.
+The caregiver console polls `/api/live`, so camera events appear on it in real
+time without reloading.
+
+> **Camera modes need more:** GRID / AIR / ASL / ASSIST / FACE additionally
+> require MediaPipe, PyAutoGUI, pytesseract (+ the tesseract binary), and the
+> rest of `requirements.txt`. The web app alone does not.
+
+## Architecture — one core, two surfaces
+
+The gesture interface and the web app are **clients of one shared storage
+layer** (`memory/`), not parallel apps:
+
+```
+                    ┌──────────────────────────────────────┐
+                    │            memory/  (local)          │
+                    │  objects.db       objects + embeddings│
+                    │  recalls.jsonl    camera recognitions │
+                    │  gesture_alerts.jsonl  HELP/PAIN…     │
+                    │  safety_events.jsonl   exit-risk      │
+                    │  activity_log.jsonl  reminders/tasks  │
+                    │  routines/ tasks/ family/ profile/    │
+                    └───────┬───────────────────────┬───────┘
+                            │ reads & writes       │ reads & writes
+              ┌─────────────▼──────────┐   ┌────────▼─────────────┐
+              │  index.py              │   │  memory_mate.py       │
+              │  camera / gesture      │   │  Flask web app        │
+              │  GRID AIR ASL FACE     │   │  patient pages        │
+              │  ASSIST MEMO           │   │  caregiver console    │
+              └─────────────┬──────────┘   └──────────────────────┘
+                            │  emergency gestures, recalls
+                            └──────────► appear on the dashboard live
+```
+
+- **Teach an object in MEMO mode (camera)** → it lands in `objects.db` and
+  shows up in the web app's `/objects` and the caregiver console.
+- **Fire an emergency gesture (ASSIST)** → it's appended to
+  `gesture_alerts.jsonl`, which the caregiver console and the daily report
+  (`memory.reporting.CaregiverReport`) both read.
+- **Safety monitor events** are written to `safety_events.jsonl` and surfaced
+  in the console with explicit uncertainty (facts ≠ interpretation).
 
 ## Modes
 
 | Mode | What it does |
 | --- | --- |
-| `GRID` | Hover-to-click virtual keyboard with word prediction |
-| `AIR` | Pinch-to-draw air writing with OCR support |
-| `ASL` | Sign-based typing from hand landmarks |
-| `ASSIST` | Emergency gesture recognition (help / pain / water / urgent) with spoken alerts |
-| `MEMO` | Personal object memory, reminders, comfort, and caregiver support |
+| `GRID` | Hover-to-click virtual keyboard with live word prediction |
+| `AIR` | Pinch thumb + index and write in the air; pause 1.5 s to auto-read (OCR) |
+| `ASL` | Hold a single-letter hand sign steady to type (A B C D E F I K L O R U V W X Y) |
+| `FACE` | Biometric face identification (InsightFace embeddings) — greet people by voice, teach new faces by speaking their name |
+| `ASSIST` | Emergency gestures (HELP / EMERGENCY / PAIN / WATER / FOOD / TOILET / YES / NO) — needs `train_model.py` first |
+| `MEMO` | Personal object memory — teach an object, say its name, recall it later |
 
 ## Dementia support features
 
@@ -32,85 +91,51 @@ Standard keyboards and phones are hard to use for the primary users, while famil
 - **Comfort mode** — validation prompts, family photos, calming support
 - **Safety monitor** — records possible exit-risk events with explicit uncertainty
 - **Caregiver reports** — daily summaries that separate facts from interpretation
-
-## Run locally
-
-Requires Python 3.9+.
-
-```bash
-# 1) Install the core deps (fast, reliable — everything the web app needs)
-pip install -r requirements-core.txt
-
-# 2) Start the app (patient + caregiver in one process)
-python memory_mate.py          # serves on http://localhost:5000
-```
-
-Open http://localhost:5000 — patient pages (`/`, `/objects`, `/family`,
-`/comfort`, `/tasks`, `/today`) and the caregiver console at `/caregiver`.
-
-> **Optional — camera/gesture modes (GRID / AIR / ASL / ASSIST):** those
-> modules additionally need MediaPipe, PyAutoGUI, pytesseract (plus the
-> tesseract binary), and the rest of `requirements.txt`. The main app does
-> not require them.
-
-Standalone helpers: `caregiver_dashboard.py` is the local Flask dashboard
-for objects, routines, tasks, and logs; `caregiver_web.py` is the older
-caregiver server.
+- **FACE enrolment by voice** — press LEARN, the app captures your face for ~2 s,
+  then asks you to say your name; from then on it greets you by name (embeddings
+  compared by cosine similarity, threshold 0.5 — robust to lighting/pose drift)
 
 ## Privacy
 
-Everything runs on-device. No cloud account, no data leaves the machine — speech prompts use offline TTS and all memory is stored locally.
+**Everything runs on-device.** No cloud account, no telemetry, no data leaves
+the machine — speech prompts use local TTS, recognition runs locally
+(MediaPipe / InsightFace / OCR), and all memory, recalls, alerts, and safety
+events are stored in the local `memory/` directory. Enrolled biometric data
+(`known_faces/`) is gitignored. The caregiver console binds to `127.0.0.1`.
 
-## Project status
+## Repo layout
 
-See `ALL_PHASES_COMPLETE.md` / `FINAL_STATUS.md` for the build-out history, `PORTFOLIO.md` for a one-page demo/interview guide, and `AGENTS.md` for development conventions.
-
----
-
-## Camera app — `index.py` (Emergency AI Communication Interface)
-
-The camera-first interface behind the gesture modes: a hand-tracked virtual
-keyboard, air writing, and sign input, all controlled by your fingers in front
-of a webcam (MediaPipe hand tracking).
-
-### Modes
-
-| Mode | What it does |
-| --- | --- |
-| `GRID`   | Hover-to-click virtual keyboard with live word prediction (type by hovering each key) |
-| `AIR`    | Pinch thumb + index together and write in the air; pause 1.5 s to auto-read the character (OCR) |
-| `ASL`    | Hold a single-letter hand sign steady to type (A B C D E F I K L O R U V W X Y) |
-| `FACE`   | Biometric face identification (OpenCV LBPH) — recognise people live, greet them by voice, and teach new faces on the spot |
-| `ASSIST` | Emergency gestures (HELP / EMERGENCY / PAIN / WATER / FOOD / TOILET / YES / NO) — needs `train_model.py` to build the model first |
-| `MEMO`   | Personal object memory — teach an object, say its name, recall it later |
-
-**FACE mode (biometric ID):** drop one photo per person into `known_faces/` —
-either `known_faces/<Name>.jpg` (single photo) or `known_faces/<Name>/` (a folder
-of photos) — and FACE mode will identify them live from the camera, draw a
-name tag with match confidence, and say “Hello, <name>” once. To teach a new
-person without files: type their name in GRID, open FACE mode, and hover
-**LEARN: <name>** while their face is in view — the app saves the photo and
-retrains instantly (LBPH, no extra dependencies).
-
-### Run it
-
-```bash
-pip install -r requirements.txt        # heavy deps: mediapipe, pyautogui, pytesseract, symspellpy
-python index.py                        # opens your webcam (GRID mode from the main menu)
-python index.py --camera 1             # pick a different webcam index
-python index.py --demo                 # self-driving tour — NO webcam needed
+```
+memorymate.py           unified entry point (--web / --camera / --demo)
+memory_mate.py          Flask web app: patient pages + caregiver console
+index.py                camera/gesture interface (GRID AIR ASL FACE ASSIST MEMO)
+face_mode.py            InsightFace embedding engine (FACE mode)
+memo_mode.py            object teach/recall state machine (MEMO mode)
+memory/                 the shared on-device storage + domain modules
+  object_model.py       objects + embeddings (SQLite) + recall log
+  alerts.py             gesture-alert bridge between camera and console
+  safety_monitor.py     conservative exit-risk monitoring
+  reporting.py          daily caregiver reports (facts / interpretation)
+  routines.py reminders.py comfort_mode.py task_guidance.py family_relations.py …
+templates/              patient.html + caregiver.html
+test_demo_mode.py       headless verification of the demo tour
 ```
 
-The `--demo` flag drives a synthetic hand through the real state machine
-(main menu → type "HELP" on the GRID keyboard → tap a word suggestion →
-AIR pinch-drawing → back to the menu), so the project can be demonstrated on
-any machine — no camera required.
+## Camera app details
 
 Controls: hover a key for ~0.45 s to click it; pinch thumb + index for 1.5 s in
 GRID mode to switch to ASL; show two open palms to escape to the main menu;
-press `q` to quit. Note: keys are pressed into whatever window has focus
-(`pyautogui`), so point it at a text editor to see the output.
+press `q` to quit. `--demo` keeps keystrokes on-screen only (no hijacking your
+keyboard); pass `--real-keys` to also send real keystrokes. The window opens
+resized to fit small screens.
 
-> **Demo tip:** `--demo` keeps keystrokes on-screen only — it won't type into
-> your other apps. Pass `--real-keys` to also send real keystrokes. The window
-> opens resized to fit small screens (drag to resize; content is 1280×720).
+**FACE enrolment:** press LEARN in FACE mode → look at the camera for ~2 s →
+say your name when prompted → it saves embeddings under that name and greets
+you on every visit. You can also drop photos in `known_faces/<Name>.jpg` or
+`known_faces/<Name>/` to pre-seed it.
+
+## Docs
+
+- `PORTFOLIO.md` — one-page interview/demo guide + suggested resume lines
+- `AGENTS.md` — development conventions for AI agents working in this repo
+- `model_spec.md` — gesture-recognition model spec and data collection

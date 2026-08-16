@@ -235,9 +235,19 @@ ASSIST_MESSAGES = {
 def log_alert(gesture, confidence):
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}]  GESTURE: {gesture:<12}  CONFIDENCE: {confidence*100:.1f}%\n"
-    with open(ALERTS_LOG, "a") as f:
-        f.write(line)
+    try:
+        with open(ALERTS_LOG, "a") as f:
+            f.write(line)
+    except Exception:
+        pass
     print(line.strip())
+    # Bridge to the caregiver console: the web app reads this same event log,
+    # so an emergency gesture fired at the camera shows up on the dashboard.
+    try:
+        from memory.alerts import log_gesture_alert
+        log_gesture_alert(gesture, confidence)
+    except Exception as e:
+        print(f"gesture-alert bridge unavailable: {e}")
 
 def fire_action(gesture, confidence, tts_engine, frame_shape):
     """Speak, log, and return an alert overlay color."""
@@ -902,7 +912,7 @@ class DemoPilot:
         return self._center(self._find(bl, "GRID")), "point"
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Emergency AI Communication Interface — hand-tracked keyboard & air writing")
     parser.add_argument("--demo", action="store_true",
@@ -911,7 +921,7 @@ def main():
                         help="webcam index (default: 0)")
     parser.add_argument("--real-keys", action="store_true",
                         help="in --demo mode, also send real keystrokes (default: demo only shows them on-screen)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     demo = DemoPilot() if args.demo else None
     cap = None if args.demo else cv2.VideoCapture(args.camera)

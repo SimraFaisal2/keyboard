@@ -43,6 +43,7 @@ from memory.patient_profile import PatientProfileStore
 from memory.safety_monitor import SafetyMonitor
 from memory.task_guidance import GuidedTaskStore
 from memory.routines import AdvancedRoutineStore, check_morning_prompt
+from memory.alerts import list_gesture_alerts
 
 CALM_RATE = 100   # slow, reassuring voice
 
@@ -220,11 +221,13 @@ class MemoryMate:
 
     # ─── Caregiver console ──────────────────────────────────────────────────
     def page_caregiver(self):
+        gesture_alerts = list_gesture_alerts(limit=20)
         stats = {
             "objects": len(self.vault.list_objects()),
             "family": len(self.family_tree.get_all_members()),
             "overdue": len(self.family_tree.get_overdue_members()),
             "tasks": len(self.tasks.load_all()),
+            "gestures": len(list_gesture_alerts(hours=24)),
         }
         return render_template("caregiver.html", stats=stats,
                                objects=sorted(self.vault.list_objects(),
@@ -235,7 +238,24 @@ class MemoryMate:
                                routines=self.routines.load_all(),
                                alerts=self.alert_history,
                                activities=self.reminders.get_activity_log(hours=48),
+                               gesture_alerts=gesture_alerts,
+                               recalls=self.vault.recent_recalls(15),
+                               recall_stats=self.vault.recall_stats(days=7),
+                               safety_events=[e.to_dict()
+                                              for e in self.safety.list_events(limit=10)],
                                name=self.profile.preferred_name)
+
+    def api_live(self):
+        """Live polling endpoint for the caregiver console: returns everything
+        the camera app and safety monitor have written since the page loaded."""
+        return jsonify({
+            "gesture_alerts": list_gesture_alerts(limit=20),
+            "recalls": self.vault.recent_recalls(15),
+            "safety_events": [e.to_dict()
+                               for e in self.safety.list_events(limit=10)],
+            "activities": self.reminders.get_activity_log(hours=48),
+            "alert": self.current_alert,
+        })
 
     # ─── API: patient actions ───────────────────────────────────────────────
     def api_object_locate(self):
@@ -402,6 +422,7 @@ def create_app(data_dir: str = "memory") -> MemoryMate:
 
     # API
     app.add_url_rule("/api/state", "api_state", mate.api_state)
+    app.add_url_rule("/api/live", "api_live", mate.api_live)
     app.add_url_rule("/api/alert/dismiss", "api_alert_dismiss",
                      mate.api_alert_dismiss, methods=["POST"])
     app.add_url_rule("/api/speak", "api_speak", mate.api_speak, methods=["POST"])
